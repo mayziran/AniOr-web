@@ -19,7 +19,7 @@ class Organizer:
 
     def organize(self, file_mappings: Dict[str, str], content_type: str,
                  tv_info: dict = None, movie_info: dict = None,
-                 season_tabs: Dict[str, Dict] = None) -> Dict:
+                 auto_extras: bool = True, scan_unorganized: bool = True) -> Dict:
         """
         执行整理操作
 
@@ -28,7 +28,8 @@ class Organizer:
             content_type: "tv" 或 "movie"
             tv_info: TV 动画信息 (content_type="tv" 时需要)
             movie_info: 电影信息 (content_type="movie" 时需要)
-            season_tabs: 季度标签页数据
+            auto_extras: 未匹配视频自动归入 extras
+            scan_unorganized: 整理后扫描未整理文件
 
         Returns:
             整理结果字典
@@ -77,7 +78,7 @@ class Organizer:
                 extras_files.append(src)
 
         # 2. auto_extras: 扫描未匹配文件并添加到 extras_files
-        if self.config.get('auto_extras', True):
+        if auto_extras:
             source_dir = Path(self.config.get('source_dir', ''))
             if source_dir.exists():
                 anime_folders = set()
@@ -219,7 +220,7 @@ class Organizer:
                 duplicate_files.add(item['src'])
 
         source_dir = Path(self.config.get('source_dir', ''))
-        if self.config.get('scan_unorganized', True) and source_dir.exists():
+        if scan_unorganized and source_dir.exists():
             anime_folders = set()
             for f in file_mappings.keys():
                 try:
@@ -254,11 +255,11 @@ class Organizer:
         }
 
     def _get_folder_videos(self, folder: Path) -> List[Path]:
-        """获取文件夹中的视频文件"""
+        """获取文件夹中的视频文件（递归扫描子文件夹）"""
         video_extensions = self.config.get_video_extensions()
         videos = []
         if folder.exists() and folder.is_dir():
-            for f in folder.iterdir():
+            for f in folder.rglob('*'):
                 if f.is_file() and f.suffix.lower() in video_extensions:
                     videos.append(f)
         return videos

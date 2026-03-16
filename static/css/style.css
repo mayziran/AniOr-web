@@ -1529,6 +1529,68 @@ body {
     color: #f44336;
 }
 
+.unorganized-list {
+    margin-top: 16px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.unorganized-header {
+    padding: 8px 12px;
+    background: #f5f5f5;
+    font-weight: bold;
+    font-size: 14px;
+    position: sticky;
+    top: 0;
+}
+
+.unorganized-item {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-bottom: 1px solid #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.unorganized-item:last-child {
+    border-bottom: none;
+}
+
+.unorganized-item.duplicate {
+    color: #f44336;
+}
+
+.unorganized-tip {
+    font-size: 13px;
+    color: #666;
+    padding: 8px 12px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.unorganized-tip .legend {
+    color: #c00;
+    font-weight: bold;
+    margin-left: 12px;
+}
+
+.unorganized-section {
+    margin-top: 16px;
+}
+
+.check-all {
+    cursor: pointer;
+    margin-right: 12px;
+}
+
+.check-all input {
+    margin-right: 4px;
+}
+
 /* 空提示 */
 .empty-tip {
     text-align: center;

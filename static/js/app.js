@@ -71,6 +71,7 @@ const app = createApp({
         const showResultModal = ref(false);
         const organizeResult = ref({});
         const selectedUnorganized = ref([]);
+        const selectAllUnorganized = ref(false);
         const pendingDirField = ref('');
         const statusText = ref('就绪');
 
@@ -206,7 +207,7 @@ const app = createApp({
             }
         };
 
-        const saveConfig = async () => {
+        const saveConfig = async (fromCheckbox = false) => {
             try {
                 // 先检查卷
                 await checkVolume();
@@ -217,7 +218,7 @@ const app = createApp({
                     body: JSON.stringify(config)
                 });
                 const data = await res.json();
-                if (data.success) {
+                if (data.success && !fromCheckbox) {
                     showConfigModal.value = false;
                     loadFolders();
                 }
@@ -1173,6 +1174,8 @@ const app = createApp({
             const data = {
                 file_mappings: fileMappings,
                 content_type: searchType.value,
+                auto_extras: config.auto_extras,
+                scan_unorganized: config.scan_unorganized,
                 tv_info: searchType.value === 'tv' ? {
                     name: selectedMedia.value.name,
                     first_air_date: selectedMedia.value.year
@@ -1192,7 +1195,7 @@ const app = createApp({
                 });
                 const result = await res.json();
                 organizeResult.value = result;
-                selectedUnorganized.value = new Array(result.unorganized_files?.length || 0).fill(true);
+                selectedUnorganized.value = [];
                 showResultModal.value = true;
 
                 if (result.success) {
@@ -1202,6 +1205,54 @@ const app = createApp({
             } catch (e) {
                 console.error('整理失败:', e);
                 statusText.value = '整理失败';
+                alert('整理失败: ' + e.message);
+            }
+        };
+
+        // 全选/取消全选未整理文件
+        const toggleSelectAllUnorganized = () => {
+            if (selectAllUnorganized.value) {
+                selectedUnorganized.value = organizeResult.value.unorganized_files?.map(f => f.path) || [];
+            } else {
+                selectedUnorganized.value = [];
+            }
+        };
+
+        // 整理选中文件到 extras
+        const organizeToExtras = async () => {
+            if (selectedUnorganized.value.length === 0) {
+                alert('请先勾选要整理的文件');
+                return;
+            }
+
+            // 将中文 mode 转为英文
+            const modeMap = {'硬链接': 'link', '剪切': 'cut', '复制': 'copy'};
+            const mode = modeMap[organizeResult.value.mode] || 'link';
+
+            const data = {
+                files: selectedUnorganized.value,
+                tv_name: organizeResult.value.tv_name,
+                year: organizeResult.value.year,
+                mode: mode
+            };
+
+            try {
+                const res = await fetch('/api/organize-extras', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert('已整理 ' + result.count + ' 个文件到 extras 文件夹');
+                    showResultModal.value = false;
+                    selectedUnorganized.value = [];
+                    loadFolders();
+                } else {
+                    alert('整理失败: ' + result.error);
+                }
+            } catch (e) {
+                console.error('整理到extras失败:', e);
                 alert('整理失败: ' + e.message);
             }
         };
@@ -1327,6 +1378,7 @@ const app = createApp({
             showResultModal,
             organizeResult,
             selectedUnorganized,
+            selectAllUnorganized,
             showDirPicker,
             dirPickerPath,
             dirEntries,
@@ -1377,6 +1429,8 @@ const app = createApp({
             switchToSingleMode,
             clearMedia,
             organize,
+            toggleSelectAllUnorganized,
+            organizeToExtras,
             saveConfig,
             checkVolume,
             volumeWarning,

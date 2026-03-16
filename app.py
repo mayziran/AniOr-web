@@ -518,11 +518,50 @@ def organize():
     content_type = data.get('content_type', 'tv')
     tv_info = data.get('tv_info')
     movie_info = data.get('movie_info')
+    auto_extras = data.get('auto_extras', True)
+    scan_unorganized = data.get('scan_unorganized', True)
 
     organizer = Organizer(config)
-    result = organizer.organize(file_mappings, content_type, tv_info, movie_info)
+    result = organizer.organize(file_mappings, content_type, tv_info, movie_info, auto_extras, scan_unorganized)
 
     return jsonify(result)
+
+
+@app.route('/api/organize-extras', methods=['POST'])
+def organize_extras():
+    """整理选中文件到 extras 文件夹"""
+    from backend.file_ops import FileOperator
+
+    data = request.json or {}
+    files = data.get('files', [])
+    tv_name = data.get('tv_name', 'Unknown')
+    year = data.get('year', '')
+    mode = data.get('mode', 'link')
+
+    target = config.get('target_dir')
+    if not target:
+        return jsonify({'success': False, 'error': '请先配置目标目录'})
+
+    target_path = Path(target)
+    extras_folder = target_path / f"{tv_name} ({year})" / "extras"
+    extras_folder.mkdir(parents=True, exist_ok=True)
+
+    success_count = 0
+    for src_path in files:
+        src = Path(src_path)
+        if src.exists():
+            dst = extras_folder / src.name
+            ok, error = FileOperator.operate(src, dst, mode)
+            if ok:
+                success_count += 1
+                # 处理关联字幕
+                sub_exts = ['.srt', '.ass', '.ssa', '.sub', '.idx', '.vtt']
+                for sub_file in src.parent.iterdir():
+                    if sub_file.is_file() and sub_file.stem == src.stem and sub_file.suffix.lower() in sub_exts:
+                        sub_dst = extras_folder / sub_file.name
+                        FileOperator.operate(sub_file, sub_dst, mode)
+
+    return jsonify({'success': True, 'count': success_count})
 
 
 @app.route('/api/scan-unmatched', methods=['POST'])

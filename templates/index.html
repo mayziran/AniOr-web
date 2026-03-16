@@ -25,10 +25,10 @@
                 </button>
                 <div class="toolbar-spacer"></div>
                 <label class="quick-switch">
-                    <input type="checkbox" v-model="config.auto_extras"> 📦 未匹配视频到extras
+                    <input type="checkbox" v-model="config.auto_extras" @change="saveConfig(true)"> 📦 未匹配视频到extras
                 </label>
                 <label class="quick-switch">
-                    <input type="checkbox" v-model="config.scan_unorganized"> 🔍 整理后扫描未整理文件
+                    <input type="checkbox" v-model="config.scan_unorganized" @change="saveConfig(true)"> 🔍 整理后扫描未整理文件
                 </label>
                 <button class="toolbar-btn" @click="showConfigModal = true">
                     <span class="btn-icon">⚙️</span> 设置
@@ -552,9 +552,36 @@
                         <div class="stat success">✅ 成功: {{ organizeResult.success_count }} 个文件</div>
                         <div class="stat fail" v-if="organizeResult.fail_count">❌ 失败: {{ organizeResult.fail_count }} 个文件</div>
                     </div>
+                    <!-- 未整理文件列表 -->
+                    <div class="unorganized-section" v-if="organizeResult.unorganized_files && organizeResult.unorganized_files.length > 0">
+                        <div class="unorganized-tip">
+                            以下是源目录中未被整理的文件，勾选确认后将整理到 extras 文件夹
+                            <span class="legend">🔴 红色 = 因重名未整理</span>
+                        </div>
+                        <div class="unorganized-header">
+                            <label class="check-all">
+                                <input type="checkbox" v-model="selectAllUnorganized" @change="toggleSelectAllUnorganized">
+                                全选
+                            </label>
+                            <span>📁 未整理文件 ({{ organizeResult.unorganized_files.length }}):</span>
+                        </div>
+                        <div class="unorganized-list">
+                            <div v-for="(item, idx) in organizeResult.unorganized_files" :key="idx"
+                                 class="unorganized-item" :class="{ duplicate: item.is_duplicate }">
+                                <label>
+                                    <input type="checkbox" v-model="selectedUnorganized" :value="item.path">
+                                    {{ item.path.split(/[/\\]/).pop() }}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn-primary" @click="showResultModal = false">确定</button>
+                    <button class="btn-secondary" @click="organizeToExtras" v-if="organizeResult.unorganized_files && organizeResult.unorganized_files.length > 0"
+                            :disabled="selectedUnorganized.length === 0">
+                        整理到 Extras ({{ selectedUnorganized.length }})
+                    </button>
+                    <button class="btn-primary" @click="showResultModal = false; selectedUnorganized = []">确定</button>
                 </div>
             </div>
         </div>
