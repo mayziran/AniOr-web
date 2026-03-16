@@ -21,6 +21,7 @@ ENV
 *.swp
 *.swo
 *~
+.claude
 
 # OS
 .DS_Store
@@ -36,9 +37,6 @@ config
 .git
 .gitignore
 
-# Docker (保留 docker-compose.yml，用户可能需要)
+# Docker
 .docker
 docker-compose.override.yml
-
-# Documentation
-README.md
