@@ -1,0 +1,44 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Virtual Environment
+venv
+env
+ENV
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+cankao
+testvideo
+config
+*.log
+
+# Git
+.git
+.gitignore
+
+# Docker (保留 docker-compose.yml，用户可能需要)
+.docker
+docker-compose.override.yml
+
+# Documentation
+README.md

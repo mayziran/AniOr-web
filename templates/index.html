@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AniOr Web - 动漫视频整理工具</title>
+    <link rel="icon" href="/static/icon.ico">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body>
+{% raw %}
+    <div id="app">
+        <!-- 顶部工具栏 -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <span class="app-title">AniOr</span>
+            </div>
+            <div class="toolbar-center">
+                <button class="toolbar-btn" @click="loadFolders(true)">
+                    <span class="btn-icon">🔄</span> 刷新文件夹
+                </button>
+                <button class="toolbar-btn" @click="refreshVideos" :disabled="!selectedFolder">
+                    <span class="btn-icon">🔄</span> 刷新该文件夹视频
+                </button>
+                <div class="toolbar-spacer"></div>
+                <label class="quick-switch">
+                    <input type="checkbox" v-model="config.auto_extras"> 📦 未匹配视频到extras
+                </label>
+                <label class="quick-switch">
+                    <input type="checkbox" v-model="config.scan_unorganized"> 🔍 整理后扫描未整理文件
+                </label>
+                <button class="toolbar-btn" @click="showConfigModal = true">
+                    <span class="btn-icon">⚙️</span> 设置
+                </button>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-container">
+            <!-- 左侧面板 -->
+            <div class="left-panel">
+                <!-- 文件夹区域 -->
+                <div class="panel-folder">
+                    <div class="panel-title">📁 动漫文件夹</div>
+                    <!-- 表头 -->
+                    <div class="list-header">
+                        <span class="col-expand"></span>
+                        <span class="col-name sortable" :class="{ active: folderSortBy === 'name' }" @click="sortFolders('name')">
+                            文件夹
+                            <span class="sort-icon" v-if="folderSortBy === 'name'">{{ folderSortAsc ? '&#9650;' : '&#9660;' }}</span>
+                        </span>
+                        <span class="col-count sortable" :class="{ active: folderSortBy === 'count' }" @click="sortFolders('count')">
+                            文件数
+                            <span class="sort-icon" v-if="folderSortBy === 'count'">{{ folderSortAsc ? '&#9650;' : '&#9660;' }}</span>
+                        </span>
+                        <span class="col-date sortable" :class="{ active: folderSortBy === 'date' }" @click="sortFolders('date')">
+                            日期
+                            <span class="sort-icon" v-if="folderSortBy === 'date'">{{ folderSortAsc ? '&#9650;' : '&#9660;' }}</span>
+                        </span>
+                    </div>
+                    <div class="folder-list" v-if="folders.length > 0">
+                        <div v-for="item in flatFolders" :key="item.path"
+                             class="folder-item"
+                             :class="{
+                                 active: selectedFolder === item.path,
+                                 matched: item.video_count != null && item.matched_count === item.video_count,
+                                 'depth-0': item.depth === 0,
+                                 'depth-1': item.depth === 1,
+                                 'depth-2': item.depth === 2,
+                                 'depth-3': item.depth >= 3
+                             }"
+                             :style="{ paddingLeft: (12 + item.depth * 24) + 'px' }">
+                            <span class="folder-expand" v-if="item.has_subfolders" @click.stop="toggleFolder(item)">
+                                {{ item.expanded ? '▼' : '▶' }}
+                            </span>
+                            <span class="folder-expand placeholder" v-else></span>
+                            <span class="folder-icon" @click="selectFolder(item)">📁</span>
+                            <span class="folder-name" @click="selectFolder(item)">{{ item.name }}</span>
+                            <span class="folder-count">{{ item.video_count !== null ? (item.matched_count || 0) + '/' + item.video_count : '-/-' }}</span>
+                            <span class="folder-date">{{ item.date }}</span>
+                        </div>
+                    </div>
+                    <div class="empty-tip" v-else>
+                        请在设置中配置源目录
+                    </div>
+                </div>
+
+                <!-- 水平分割器 -->
+                <div class="resize-handle-h" @mousedown="startResizeH"></div>
+
+                <!-- 视频列表 -->
+                <div class="panel-video" v-if="selectedFolder">
+                    <div class="panel-title">
+                        <span>🎬 视频文件 ({{ videos.length }})</span>
+                        <div class="video-actions">
+                            <button class="action-btn" @click="selectAllVideos">全选</button>
+                            <button class="action-btn" @click="deselectAllVideos">不选</button>
+                        </div>
+                    </div>
+                    <div class="list-header">
+                        <span class="col-check"></span>
+                        <span class="col-name sortable" :class="{ active: videoSortBy === 'name' }" @click="sortVideos('name')">
+                            文件名
+                            <span class="sort-icon" v-if="videoSortBy === 'name'">{{ videoSortAsc ? '&#9650;' : '&#9660;' }}</span>
+                        </span>
+                        <span class="col-size sortable" :class="{ active: videoSortBy === 'size' }" @click="sortVideos('size')">
+                            大小
+                            <span class="sort-icon" v-if="videoSortBy === 'size'">{{ videoSortAsc ? '&#9650;' : '&#9660;' }}</span>
+                        </span>
+                        <span class="col-date sortable" :class="{ active: videoSortBy === 'date' }" @click="sortVideos('date')">
+                            日期
+                            <span class="sort-icon" v-if="videoSortBy === 'date'">{{ videoSortAsc ? '&#9650;' : '&#9660;' }}</span>
+                        </span>
+                    </div>
+                    <div class="video-list" v-if="videos.length > 0">
+                        <div v-for="(video, index) in videos" :key="video.path"
+                             class="video-item"
+                             :class="{ matched: matchedFiles.has(video.path), selected: selectedVideos.has(video.path) }"
+                             @click="handleVideoClick(video, index, $event)"
+                             @contextmenu.prevent="showVideoMenu($event, video)"
+                             draggable="true"
+                             @dragstart="onDragStart($event, video)">
+                            <span class="col-check">
+                                <input type="checkbox" :checked="selectedVideos.has(video.path)" @click.stop>
+                            </span>
+                            <span class="col-name">{{ video.name }}</span>
+                            <span class="col-size">{{ video.size }}</span>
+                            <span class="col-date">{{ video.date }}</span>
+                        </div>
+                    </div>
+                    <!-- 右键菜单 -->
+                    <div class="context-menu" v-if="videoMenu.show" :style="{ top: videoMenu.y + 'px', left: videoMenu.x + 'px' }">
+                        <div class="menu-item" @click="copyVideoName">复制文件名</div>
+                        <div class="menu-item" @click="copyVideoPath">复制路径</div>
+                    </div>
+                    <div class="empty-tip" v-else>该文件夹无视频</div>
+                </div>
+            </div>
+
+            <!-- 垂直分割器 -->
+            <div class="resize-handle-v" @mousedown="startResizeV"></div>
+
+            <!-- 右侧面板 -->
+            <div class="right-panel">
+                <!-- 搜索栏 -->
+                <div class="search-section">
+                    <div class="search-header">
+                        <button class="type-btn" :class="{ active: searchType === 'tv' }" @click="searchType = 'tv'">
+                            📺 TV 动画
+                        </button>
+                        <button class="type-btn movie" :class="{ active: searchType === 'movie' }" @click="searchType = 'movie'">
+                            🎬 剧场版
+                        </button>
+                    </div>
+                    <div class="search-box">
+                        <input type="text" v-model="searchQuery" @keyup.enter="searchTmdb"
+                               placeholder="输入动漫名称搜索...">
+                        <button class="search-btn" @click="searchTmdb">🔍</button>
+                    </div>
+                </div>
+
+                <!-- 已选信息 -->
+                <div class="selected-info" v-if="selectedMedia">
+                    <span class="media-icon">{{ searchType === 'tv' ? '📺' : '🎬' }}</span>
+                    <span class="media-title">{{ searchType === 'tv' ? selectedMedia.name : selectedMedia.title }}</span>
+                    <a class="media-link" :href="'https://www.themoviedb.org/' + (searchType === 'tv' ? 'tv' : 'movie') + '/' + selectedMedia.id" target="_blank">🔗 TMDB</a>
+                    <span class="media-right">
+                        <button class="back-btn" @click="clearMedia">✕</button>
+                    </span>
+                </div>
+
+                <!-- 内容区 -->
+                <div class="content-area">
+                    <!-- 搜索结果 -->
+                    <div class="search-results" v-if="searchResults.length > 0 && !selectedMedia">
+                        <div v-for="result in searchResults" :key="result.id"
+                             class="result-item"
+                             @click="selectMedia(result)">
+                            <div class="result-poster" v-if="result.poster_path">
+                                <img :src="'https://image.tmdb.org/t/p/w185' + result.poster_path">
+                            </div>
+                            <div class="result-info">
+                                <div class="result-title">{{ searchType === 'tv' ? result.name : result.title }}</div>
+                                <div class="result-meta">{{ result.date }} · ⭐ {{ result.vote.toFixed(1) }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TV动画详情 -->
+                    <div class="tv-detail" v-if="selectedMedia && searchType === 'tv'">
+                        <!-- 季度标签 + Extras标签 (Extras在最前面) -->
+                        <div class="season-tabs">
+                            <div class="tabs-scroll">
+                                <div class="tab-btn extras-tab"
+                                     :class="{ active: currentSeason === 'extras' }"
+                                     @click="currentSeason = 'extras'">
+                                    📦 Extras <span v-if="extrasFiles.length > 0">({{ extrasFiles.length }})</span>
+                                </div>
+                                <div v-for="season in seasons" :key="season.season_number"
+                                     class="tab-btn"
+                                     :class="{ active: currentSeason === season.season_number }"
+                                     @click="selectSeason(season.season_number)">
+                                    {{ season.name || 'S' + season.season_number }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Extras 面板 -->
+                        <div class="extras-panel" v-if="currentSeason === 'extras'">
+                            <div class="extras-tip">
+                                💡 拖放视频文件到此处，整理时会移动到 extras 文件夹（保留原文件名）
+                            </div>
+                            <div class="drop-zones">
+                                <div class="drop-zone add" @dragover.prevent @drop="onExtrasDrop">
+                                    <span class="drop-icon">➕</span>
+                                    <span class="drop-text">拖放到此处添加</span>
+                                </div>
+                            </div>
+                            <div class="match-list" v-if="extrasFiles.length > 0">
+                                <div v-for="(file, idx) in extrasFiles" :key="idx" class="match-row">
+                                    <span class="match-name">{{ file.name }}</span>
+                                    <button class="match-del" @click="removeExtrasFile(idx)">✕</button>
+                                </div>
+                            </div>
+                            <div class="empty-hint" v-else>
+                                暂无文件，拖放视频到上方区域添加
+                            </div>
+                            <div class="extras-actions" v-if="extrasFiles.length > 0">
+                                <button class="clear-btn" @click="clearExtras">🗑️ 清空所有</button>
+                            </div>
+                        </div>
+
+                        <!-- 季度内容 -->
+                        <div class="season-content" v-if="currentSeason !== null && currentSeason !== 'extras'">
+                            <!-- 模式切换 -->
+                            <div class="mode-bar">
+                                <span class="mode-label">匹配模式：</span>
+                                <button class="mode-btn" :class="{ active: matchMode === 'batch' }" @click="matchMode = 'batch'">
+                                    📥 批量
+                                </button>
+                                <button class="mode-btn" :class="{ active: matchMode === 'single' }" @click="switchToSingleMode">
+                                    🎬 单集
+                                </button>
+                                <span class="mode-hint" v-if="matchMode === 'single'">👇 拖放到下方框内</span>
+                                <span class="spacer"></span>
+                                <button class="clear-btn" v-if="hasMatches" @click="clearSeasonMatches">🗑️ 清空</button>
+                            </div>
+
+                            <!-- 批量模式 -->
+                            <div class="batch-panel" v-if="matchMode === 'batch'">
+                                <div class="drop-zones">
+                                    <div class="drop-zone add"
+                                         @dragover.prevent
+                                         @drop="onBatchDrop($event, 'add')">
+                                        <span class="drop-icon">➕</span>
+                                        <span class="drop-text">新增</span>
+                                    </div>
+                                    <div class="drop-zone sort"
+                                         @dragover.prevent
+                                         @drop="onBatchDrop($event, 'sort')">
+                                        <span class="drop-icon">📋</span>
+                                        <span class="drop-text">覆盖</span>
+                                    </div>
+                                </div>
+                                <div class="match-list" v-if="batchFiles.length > 0">
+                                    <div v-for="(file, idx) in batchFiles" :key="idx"
+                                         class="match-row"
+                                         draggable="true"
+                                         @dragstart="onMatchItemDragStart($event, idx)"
+                                         @dragover.prevent
+                                         @drop="onMatchItemDrop($event, idx)">
+                                        <span class="match-handle">☰</span>
+                                        <span class="match-ep">E{{ String(idx+1).padStart(2,'0') }}</span>
+                                        <span class="match-name">{{ file.name }}</span>
+                                        <button class="match-del" @click="removeBatchFile(idx)">✕</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 单集模式 -->
+                            <div class="single-panel" v-else>
+                                <div class="episodes-scroll" v-if="episodes.length > 0">
+                                    <div v-for="ep in episodes" :key="ep.episode_number"
+                                         class="episode-item"
+                                         :class="{ matched: matchedEpisodes[currentSeason + 'E' + ep.episode_number] }"
+                                         @dragover.prevent
+                                         @drop="onSingleDrop($event, ep.episode_number)">
+                                        <!-- 左侧：剧照 -->
+                                        <div class="ep-left">
+                                            <div class="ep-still">
+                                                <img v-if="ep.still_path" :src="'https://image.tmdb.org/t/p/w185' + ep.still_path">
+                                                <span v-else class="ep-num">E{{ ep.episode_number }}</span>
+                                            </div>
+                                        </div>
+                                        <!-- 右侧：标题和简介 -->
+                                        <div class="ep-right">
+                                            <div class="ep-header">
+                                                <span class="ep-num-bold">E{{ String(ep.episode_number).padStart(2, '0') }}</span>
+                                                <span class="ep-name">{{ ep.name }}</span>
+                                                <span class="ep-date" v-if="ep.air_date || ep.runtime">
+                                                    <span v-if="ep.air_date">📅 {{ ep.air_date }}</span>
+                                                    <span v-if="ep.runtime"> · ⏱ {{ ep.runtime }}分钟</span>
+                                                </span>
+                                                <button class="ep-cancel" v-if="matchedEpisodes[currentSeason + 'E' + ep.episode_number]" @click="cancelMatch(ep.episode_number)">✕ 取消</button>
+                                            </div>
+                                            <div class="ep-info-area" v-if="matchedEpisodes[currentSeason + 'E' + ep.episode_number]">
+                                                <span class="ep-matched-name">✅ 已匹配: {{ matchedEpisodes[currentSeason + 'E' + ep.episode_number].name }}</span>
+                                            </div>
+                                            <div class="ep-info-area" v-else-if="ep.overview">
+                                                <div class="ep-overview">{{ ep.overview }}</div>
+                                            </div>
+                                            <div class="ep-info-area empty" v-else>
+                                                拖放视频到此处
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="loading" v-else-if="episodesLoading">加载中...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 剧场版详情 -->
+                    <div class="movie-detail" v-if="selectedMedia && searchType === 'movie'">
+                        <!-- 标签切换 (Extras / 主面板) -->
+                        <div class="season-tabs">
+                            <div class="tabs-scroll">
+                                <div class="tab-btn extras-tab"
+                                     :class="{ active: currentMovieTab === 'extras' }"
+                                     @click="currentMovieTab = 'extras'">
+                                    📦 Extras <span v-if="extrasFiles.length > 0">({{ extrasFiles.length }})</span>
+                                </div>
+                                <div class="tab-btn"
+                                     :class="{ active: currentMovieTab === 'main' }"
+                                     @click="currentMovieTab = 'main'">
+                                    🎬 影片
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 主面板 -->
+                        <div v-if="currentMovieTab === 'main'">
+                            <!-- 顶部提示和清空按钮 -->
+                            <div class="movie-top-bar">
+                                <span class="movie-hint">👇 拖动视频文件到下方区域，多文件自动添加 -cd1, -cd2 后缀</span>
+                                <button class="clear-all-btn" v-if="movieFiles.length > 0" @click="clearAllMovieMatches">🗑️ 清空所有</button>
+                            </div>
+
+                            <div class="movie-info">
+                                <div class="movie-poster">
+                                    <img v-if="selectedMedia.poster_path" :src="'https://image.tmdb.org/t/p/w300' + selectedMedia.poster_path">
+                                    <span v-else class="poster-placeholder">🎬</span>
+                                </div>
+                                <div class="movie-text">
+                                    <h2>{{ selectedMedia.title }}</h2>
+                                    <p class="movie-meta">
+                                        <span v-if="selectedMedia.release_date">📅 {{ selectedMedia.release_date }}</span>
+                                        <span v-if="selectedMedia.runtime">⏱ {{ selectedMedia.runtime }}分钟</span>
+                                        <span v-if="selectedMedia.vote_average">⭐ {{ selectedMedia.vote_average.toFixed(1) }}分</span>
+                                    </p>
+                                    <p class="movie-overview">{{ selectedMedia.overview || '暂无简介' }}</p>
+                                    <!-- 状态标签 -->
+                                    <div class="movie-status" :class="{ active: movieFiles.length > 0 }">
+                                        {{ getMovieStatusText() }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="drop-zones">
+                                <div class="drop-zone add" @dragover.prevent @drop="onMovieDrop($event, 'add')">
+                                    <span class="drop-icon">➕</span>
+                                    <span class="drop-text">新增</span>
+                                    <span class="drop-hint">按文件名排序追加到列表</span>
+                                </div>
+                                <div class="drop-zone sort" @dragover.prevent @drop="onMovieDrop($event, 'sort')">
+                                    <span class="drop-icon">📋</span>
+                                    <span class="drop-text">覆盖</span>
+                                    <span class="drop-hint">按文件名排序覆盖列表</span>
+                                </div>
+                            </div>
+                            <div class="match-list" v-if="movieFiles.length > 0">
+                                <div v-for="(file, idx) in movieFiles" :key="idx" class="match-row movie"
+                                     draggable="true"
+                                     @dragstart="onMovieItemDragStart($event, idx)"
+                                     @dragover.prevent
+                                     @drop="onMovieItemDrop($event, idx)">
+                                    <span class="match-handle">☰</span>
+                                    <span class="match-cd">{{ movieFiles.length > 1 ? 'CD'+(idx+1) : '正片' }}</span>
+                                    <span class="match-name">{{ file.name }}</span>
+                                    <button class="match-del" @click="removeMovieFile(idx)">✕</button>
+                                </div>
+                            </div>
+                            <div class="empty-hint" v-else>
+                                将视频文件拖放到上方新增/覆盖区域
+                            </div>
+                        </div>
+
+                        <!-- Extras 面板 -->
+                        <div class="extras-panel" v-if="currentMovieTab === 'extras'">
+                            <div class="extras-tip">
+                                💡 拖放视频文件到此处，整理时会移动到 extras 文件夹（保留原文件名）
+                            </div>
+                            <div class="drop-zones">
+                                <div class="drop-zone add" @dragover.prevent @drop="onExtrasDrop">
+                                    <span class="drop-icon">➕</span>
+                                    <span class="drop-text">拖放到此处添加</span>
+                                </div>
+                            </div>
+                            <div class="match-list" v-if="extrasFiles.length > 0">
+                                <div v-for="(file, idx) in extrasFiles" :key="idx" class="match-row">
+                                    <span class="match-name">{{ file.name }}</span>
+                                    <button class="match-del" @click="removeExtrasFile(idx)">✕</button>
+                                </div>
+                            </div>
+                            <div class="empty-hint" v-else>
+                                暂无文件，拖放视频到上方区域添加
+                            </div>
+                            <div class="extras-actions" v-if="extrasFiles.length > 0">
+                                <button class="clear-btn" @click="clearExtras">🗑️ 清空所有</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 整理按钮 -->
+                <div class="organize-bar">
+                    <button class="organize-btn" @click="organize" :disabled="!canOrganize">
+                        🚀 开始整理 🚀
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部状态栏 -->
+        <div class="bottom-status-bar">
+            <div class="status-left">
+                <span>{{ statusText }}</span>
+                <span class="divider">|</span>
+                <span>已加载: {{ videos.length }}</span>
+                <span class="divider">|</span>
+                <span>已选中: {{ selectedVideos.size }}</span>
+            </div>
+            <div class="status-right">
+                <span class="status-text">已匹配: {{ matchedCount }} 个</span>
+            </div>
+        </div>
+
+        <!-- 设置弹窗 -->
+        <div class="modal-overlay" v-if="showConfigModal" @click.self="showConfigModal = false">
+            <div class="modal-box">
+                <div class="modal-header">
+                    <h3>⚙️ 设置</h3>
+                    <button class="modal-close" @click="showConfigModal = false">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-item">
+                        <label>源目录</label>
+                        <div class="input-group">
+                            <input type="text" v-model="config.source_dir" placeholder="动漫文件夹所在目录">
+                            <button class="input-btn" @click="selectDirectory('source_dir')">浏览</button>
+                        </div>
+                    </div>
+                    <div class="form-item">
+                        <label>目标目录 (TV动画)</label>
+                        <div class="input-group">
+                            <input type="text" v-model="config.target_dir" placeholder="整理后存放目录">
+                            <button class="input-btn" @click="selectDirectory('target_dir')">浏览</button>
+                        </div>
+                    </div>
+                    <div class="form-item">
+                        <label>目标目录 (剧场版)</label>
+                        <div class="input-group">
+                            <input type="text" v-model="config.movie_target_dir" placeholder="剧场版专用目录">
+                            <button class="input-btn" @click="selectDirectory('movie_target_dir')">浏览</button>
+                        </div>
+                    </div>
+                    <div class="form-item">
+                        <label>TMDB API Key</label>
+                        <input type="text" v-model="config.tmdb_api_key" placeholder="TMDB API Key">
+                    </div>
+                    <div class="form-item">
+                        <label>整理模式</label>
+                        <select v-model="config.move_mode">
+                            <option value="link">🔗 硬链接</option>
+                            <option value="cut">✂️ 剪切</option>
+                            <option value="copy">📋 复制</option>
+                        </select>
+                    </div>
+                    <div class="form-item">
+                        <label>视频格式</label>
+                        <input type="text" v-model="config.video_extensions" placeholder=".mp4,.mkv,.avi,...">
+                        <p class="form-tip">用逗号分隔，如：.mp4,.mkv,.avi</p>
+                    </div>
+                    <div class="form-item">
+                        <label>extras 设置</label>
+                        <label class="quick-switch">
+                            <input type="checkbox" v-model="config.embyignore_extras"> 生成 .embyignore 文件
+                        </label>
+                        <p class="form-tip">在 extras 文件夹生成 .embyignore 文件，让 Emby 忽略该文件夹</p>
+                    </div>
+                </div>
+                <!-- 卷警告提示 -->
+                <div v-if="volumeWarning" class="volume-warning">
+                    {{ volumeWarning }}
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" @click="saveConfig">保存</button>
+                    <button class="btn-default" @click="showConfigModal = false">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目录浏览弹窗 -->
+        <div class="modal-overlay" v-if="showDirPicker" @click.self="showDirPicker = false">
+            <div class="modal-box dir-browser">
+                <div class="modal-header">
+                    <h3>选择目录</h3>
+                    <button class="modal-close" @click="showDirPicker = false">✕</button>
+                </div>
+                <div class="dir-path-bar">
+                    <input type="text" v-model="dirPickerPath" @keyup.enter="loadDirEntries" placeholder="输入路径">
+                    <button class="input-btn" @click="loadDirEntries">刷新</button>
+                </div>
+                <div class="dir-list">
+                    <div class="loading" v-if="dirEntriesLoading">加载中...</div>
+                    <div v-else-if="dirEntries.length === 0" class="empty-tip">空目录</div>
+                    <div v-else>
+                        <div v-for="entry in dirEntries" :key="entry.path"
+                             class="dir-item"
+                             @click="selectDirEntry(entry)">
+                            <span class="dir-icon">{{ entry.is_dir ? '📁' : '📄' }}</span>
+                            <span class="dir-name">{{ entry.name }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" @click="confirmDirSelection">确定</button>
+                    <button class="btn-default" @click="showDirPicker = false">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 整理结果弹窗 -->
+        <div class="modal-overlay" v-if="showResultModal" @click.self="showResultModal = false">
+            <div class="modal-box result-modal">
+                <div class="modal-header">
+                    <h3>🎉 整理完成</h3>
+                    <button class="modal-close" @click="showResultModal = false">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="result-stats">
+                        <div class="stat success">✅ 成功: {{ organizeResult.success_count }} 个文件</div>
+                        <div class="stat fail" v-if="organizeResult.fail_count">❌ 失败: {{ organizeResult.fail_count }} 个文件</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" @click="showResultModal = false">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endraw %}
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

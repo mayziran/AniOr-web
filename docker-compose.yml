@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  anior:
+    image: mayziran/anior
+    container_name: anior
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - "5000:5000"
+    volumes:
+      - /你的视频目录:/data
+      - ./config:/app/config
