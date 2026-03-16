@@ -218,12 +218,17 @@ const app = createApp({
                     body: JSON.stringify(config)
                 });
                 const data = await res.json();
-                if (data.success && !fromCheckbox) {
-                    showConfigModal.value = false;
-                    loadFolders();
+                if (data.success) {
+                    if (fromCheckbox !== true) {
+                        showConfigModal.value = false;
+                        loadFolders();
+                    }
+                } else {
+                    alert('保存配置失败');
                 }
             } catch (e) {
                 console.error('保存配置失败:', e);
+                alert('保存配置失败: ' + e.message);
             }
         };
 
