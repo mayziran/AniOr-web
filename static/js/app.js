@@ -59,6 +59,7 @@ const app = createApp({
         // 匹配数据 - 每个季度独立保存
         const seasonBatchFiles = reactive({});  // {seasonNum: [files]}
         const seasonMatchedEpisodes = reactive({});  // {seasonNum_E + episodeNum: {path, name}}
+        const seasonEpisodesCache = reactive({});  // {seasonNum: [episodes]} - TMDB 剧集信息缓存
         const batchFiles = ref([]);
         const movieFiles = ref([]);
         const extrasFiles = ref([]);
@@ -973,6 +974,7 @@ const app = createApp({
             movieFiles.value = [];
             extrasFiles.value = [];
             Object.keys(matchedEpisodes).forEach(key => delete matchedEpisodes[key]);
+            Object.keys(seasonEpisodesCache).forEach(key => delete seasonEpisodesCache[key]); // 清空剧集缓存
 
             if (searchType.value === 'tv') {
                 try {
@@ -1051,11 +1053,20 @@ const app = createApp({
                 batchFiles.value = [];
             }
 
+            // 检查缓存
+            if (seasonEpisodesCache[seasonNum]) {
+                episodes.value = seasonEpisodesCache[seasonNum];
+                episodesLoading.value = false;
+                updateMatchedFiles();
+                return;
+            }
+
             try {
                 const res = await fetch(`/api/tmdb/details?id=${selectedMedia.value.id}&type=tv&season=${seasonNum}`);
                 const data = await res.json();
                 if (data.success) {
                     episodes.value = data.episodes;
+                    seasonEpisodesCache[seasonNum] = data.episodes; // 缓存
                 }
             } catch (e) {
                 console.error('获取季度详情失败:', e);
@@ -1112,7 +1123,7 @@ const app = createApp({
                 }
 
                 // 收集所有季度的单集匹配数据
-                Object.entries(seasonMatchedEpisodes).forEach(([seasonKey, episodes]) => {
+                Object.entries(seasonMatchedEpisodes).forEach(([, episodes]) => {
                     if (episodes) {
                         Object.entries(episodes).forEach(([key, ep]) => {
                             if (ep.path) fileMappings[ep.path] = key;
