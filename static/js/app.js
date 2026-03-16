@@ -727,7 +727,7 @@ const app = createApp({
                 return;
             }
 
-            const key = currentSeason.value + 'E' + epNum;
+            const key = 'S' + String(currentSeason.value).padStart(2, '0') + 'E' + String(epNum).padStart(2, '0');
             matchedEpisodes[key] = { path: path, name: path.split(/[/\\]/).pop() };
             statusText.value = 'E' + epNum + ' 已匹配: ' + path.split(/[/\\]/).pop();
             updateMatchedFiles();
@@ -798,6 +798,11 @@ const app = createApp({
             const paths = getDragPaths(event);
             if (!paths.length) return;
 
+            // 检查是否已在其他季度/剧场版匹配
+            if (checkDuplicateFiles(paths)) {
+                return;
+            }
+
             const newFiles = paths.map(p => {
                 const name = p.split(/[/\\]/).pop();
                 return { path: p, name: name };
@@ -840,7 +845,7 @@ const app = createApp({
         };
 
         const cancelMatch = (epNum) => {
-            const key = currentSeason.value + 'E' + epNum;
+            const key = 'S' + String(currentSeason.value).padStart(2, '0') + 'E' + String(epNum).padStart(2, '0');
             delete matchedEpisodes[key];
             updateMatchedFiles();
         };
@@ -1013,14 +1018,19 @@ const app = createApp({
         };
 
         const selectSeason = async (seasonNum) => {
-            // 先保存当前季度的数据（如果是数字季度才保存）
+            // 先保存当前季度的数据
             const prevSeason = currentSeason.value;
-            if (prevSeason !== null && prevSeason !== 'extras' && typeof prevSeason === 'number') {
-                if (matchMode.value === 'batch') {
-                    seasonBatchFiles[prevSeason] = [...batchFiles.value];
-                } else {
-                    // 保存当前季度的单集匹配数据
-                    seasonMatchedEpisodes[prevSeason] = {...matchedEpisodes};
+            // 跳过 null 和 'extras'
+            if (prevSeason !== null && prevSeason !== 'extras') {
+                // 统一转为数字
+                const ps = Number(prevSeason);
+                if (!isNaN(ps)) {
+                    if (matchMode.value === 'batch') {
+                        seasonBatchFiles[ps] = [...batchFiles.value];
+                    } else {
+                        // 保存当前季度的单集匹配数据
+                        seasonMatchedEpisodes[ps] = {...matchedEpisodes};
+                    }
                 }
             }
 
@@ -1036,16 +1046,19 @@ const app = createApp({
             episodesLoading.value = true;
             episodes.value = [];
 
+            // 转为数字
+            const sn = Number(seasonNum);
+
             // 加载该季度的数据
-            if (seasonBatchFiles[seasonNum]) {
-                batchFiles.value = [...seasonBatchFiles[seasonNum]];
+            if (seasonBatchFiles[sn]) {
+                batchFiles.value = [...seasonBatchFiles[sn]];
                 matchMode.value = 'batch';
-            } else if (seasonMatchedEpisodes[seasonNum]) {
-                Object.assign(matchedEpisodes, seasonMatchedEpisodes[seasonNum]);
+            } else if (seasonMatchedEpisodes[sn]) {
+                Object.assign(matchedEpisodes, seasonMatchedEpisodes[sn]);
                 matchMode.value = 'single';
             } else {
                 // S0 默认单集模式，其他默认批量模式
-                if (seasonNum === 0) {
+                if (sn === 0) {
                     matchMode.value = 'single';
                 } else {
                     matchMode.value = 'batch';
@@ -1108,17 +1121,21 @@ const app = createApp({
             } else {
                 // 收集所有季度的批量匹配数据
                 Object.entries(seasonBatchFiles).forEach(([seasonNum, files]) => {
+                    // 跳过非数字的 key（如 'extras'）
+                    if (isNaN(Number(seasonNum))) return;
                     if (files && files.length > 0) {
+                        const s = Number(seasonNum);
                         files.forEach((f, idx) => {
-                            fileMappings[f.path] = `S${String(seasonNum).padStart(2, '0')}E${String(idx + 1).padStart(2, '0')}`;
+                            fileMappings[f.path] = `S${String(s).padStart(2, '0')}E${String(idx + 1).padStart(2, '0')}`;
                         });
                     }
                 });
 
                 // 收集当前季度的批量数据（仅当不是 Extras 时）
                 if (matchMode.value === 'batch' && batchFiles.value.length > 0 && typeof currentSeason.value === 'number') {
+                    const s = Number(currentSeason.value);
                     batchFiles.value.forEach((f, idx) => {
-                        fileMappings[f.path] = `S${String(currentSeason.value).padStart(2, '0')}E${String(idx + 1).padStart(2, '0')}`;
+                        fileMappings[f.path] = `S${String(s).padStart(2, '0')}E${String(idx + 1).padStart(2, '0')}`;
                     });
                 }
 

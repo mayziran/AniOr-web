@@ -283,7 +283,7 @@
                                 <div class="episodes-scroll" v-if="episodes.length > 0">
                                     <div v-for="ep in episodes" :key="ep.episode_number"
                                          class="episode-item"
-                                         :class="{ matched: matchedEpisodes[currentSeason + 'E' + ep.episode_number] }"
+                                         :class="{ matched: matchedEpisodes['S' + String(currentSeason).padStart(2, '0') + 'E' + String(ep.episode_number).padStart(2, '0')] }"
                                          @dragover.prevent
                                          @drop="onSingleDrop($event, ep.episode_number)">
                                         <!-- 左侧：剧照 -->
@@ -302,10 +302,10 @@
                                                     <span v-if="ep.air_date">📅 {{ ep.air_date }}</span>
                                                     <span v-if="ep.runtime"> · ⏱ {{ ep.runtime }}分钟</span>
                                                 </span>
-                                                <button class="ep-cancel" v-if="matchedEpisodes[currentSeason + 'E' + ep.episode_number]" @click="cancelMatch(ep.episode_number)">✕ 取消</button>
+                                                <button class="ep-cancel" v-if="matchedEpisodes['S' + String(currentSeason).padStart(2, '0') + 'E' + String(ep.episode_number).padStart(2, '0')]" @click="cancelMatch(ep.episode_number)">✕ 取消</button>
                                             </div>
-                                            <div class="ep-info-area" v-if="matchedEpisodes[currentSeason + 'E' + ep.episode_number]">
-                                                <span class="ep-matched-name">✅ 已匹配: {{ matchedEpisodes[currentSeason + 'E' + ep.episode_number].name }}</span>
+                                            <div class="ep-info-area" v-if="matchedEpisodes['S' + String(currentSeason).padStart(2, '0') + 'E' + String(ep.episode_number).padStart(2, '0')]">
+                                                <span class="ep-matched-name">✅ 已匹配: {{ matchedEpisodes['S' + String(currentSeason).padStart(2, '0') + 'E' + String(ep.episode_number).padStart(2, '0')].name }}</span>
                                             </div>
                                             <div class="ep-info-area" v-else-if="ep.overview">
                                                 <div class="ep-overview">{{ ep.overview }}</div>

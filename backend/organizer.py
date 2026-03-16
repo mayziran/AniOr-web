@@ -2,6 +2,7 @@
 整理逻辑模块 - 复刻 PyQt5 start_link 方法
 """
 import os
+import re
 from pathlib import Path
 from typing import List, Tuple, Dict, Set, Optional
 
@@ -153,7 +154,10 @@ class Organizer:
                 if ep_key == "extras":
                     continue
 
-                s_num = int(ep_key[1:3])
+                # 解析 S01E01 格式
+                import re
+                match = re.match(r'S(\d+)E\d+', ep_key)
+                s_num = int(match.group(1)) if match else 0
                 folder = target_path / f"{tv_name} ({year})" / (f"Season0" if s_num == 0 else f"Season{s_num}")
                 dst = folder / f"{ep_key} - {src.name}"
 
