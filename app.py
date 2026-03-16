@@ -660,4 +660,9 @@ def check_volume():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    import os
+    # 检测是否在 Docker 容器中
+    in_docker = os.path.exists('/.dockerenv')
+    # Docker 默认关闭 debug，本地开发默认开启
+    debug_mode = not in_docker
+    app.run(host='0.0.0.0', port=5000, debug=debug_mode)
