@@ -574,16 +574,13 @@ const app = createApp({
 
             if (!originalFolder.expanded) {
                 // 展开 - 检查缓存或扫描
-                // 一级文件夹需要扫描子文件夹结构，子文件夹不需要
-                const isTopLevel = folders.value.some(f => f.path === originalFolder.path);
                 const cacheKey = originalFolder.path;
                 let result = folderCache[cacheKey];
 
                 if (!result) {
                     // 未扫描过，先扫描
-                    // 一级文件夹：扫描所有视频 + 子文件夹结构 (rootOnly: false)
-                    // 子文件夹：只扫描根目录视频 (rootOnly: true)
-                    result = await scanFolder(originalFolder, { rootOnly: !isTopLevel });
+                    // 无论一级文件夹还是子文件夹，都扫描所有视频 + 子文件夹结构
+                    result = await scanFolder(originalFolder, { rootOnly: false });
                 }
 
                 if (result) {
@@ -845,12 +842,48 @@ const app = createApp({
                     statusText.value = '刷新失败';
                 }
             } else {
-                // 子文件夹：只扫描根目录视频
-                const folderData = await scanFolder({ path: selectedFolder.value }, { rootOnly: true });
+                // 子文件夹：从父文件夹缓存中提取视频
+                let folderData = null;
+                
+                // 遍历所有缓存，找到包含该子文件夹的父缓存
+                for (const [cacheKey, cacheValue] of Object.entries(folderCache)) {
+                    if (cacheKey.endsWith('_root')) continue;
+                    
+                    const targetPathNormalized = selectedFolder.value.replace(/\\/g, '/');
+                    if (cacheValue.subfolders) {
+                        const childInCache = findSubfolder(cacheValue.subfolders, targetPathNormalized);
+                        if (childInCache) {
+                            const childVideos = (cacheValue.videos || []).filter(v => {
+                                const videoPath = v.path.replace(/\\/g, '/');
+                                return videoPath.startsWith(targetPathNormalized + '/');
+                            });
+                            
+                            folderData = {
+                                ...cacheValue,
+                                videos: childVideos,
+                                video_count: childVideos.length,
+                                matched_count: childVideos.filter(v => matchedFiles.value.has(v.path)).length
+                            };
+                            break;
+                        }
+                    }
+                }
+                
+                // 如果缓存中没有，调用 API 扫描
+                if (!folderData) {
+                    folderData = await scanFolder({ path: selectedFolder.value }, { rootOnly: false });
+                }
 
                 if (folderData) {
-                    videos.value = folderData.videos || [];
-                    // 应用保存的排序状态
+                    // 过滤出根目录视频
+                    const targetPathNormalized = selectedFolder.value.replace(/\\/g, '/');
+                    const rootVideos = (folderData.videos || []).filter(v => {
+                        const videoPath = v.path.replace(/\\/g, '/');
+                        const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
+                        return videoDir === targetPathNormalized;
+                    });
+                    
+                    videos.value = rootVideos;
                     sortVideos(videoSortBy.value, videoSortAsc.value);
 
                     const folderName = selectedFolder.value.split(/[/\\]/).pop();
