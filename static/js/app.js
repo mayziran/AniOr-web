@@ -1204,6 +1204,7 @@ const app = createApp({
             Object.keys(seasonMatchedEpisodes).forEach(key => delete seasonMatchedEpisodes[key]);
             Object.keys(seasonMatchModes).forEach(key => delete seasonMatchModes[key]);
             Object.keys(seasonFileMappings).forEach(key => delete seasonFileMappings[key]);
+            updateMatchedFiles();  // 刷新高亮（与原版 _refresh_all_folders 对应）
             statusText.value = '已选择：' + media.name;
 
             if (searchType.value === 'tv') {
@@ -1343,6 +1344,9 @@ const app = createApp({
             if (!isNaN(sn)) {
                 updateCurrentSeasonFileMapping();
             }
+
+            // 刷新高亮（与原版 _update_status 对应）
+            updateMatchedFiles();
 
             // 检查缓存
             if (seasonEpisodesCache[seasonNum]) {
@@ -1497,6 +1501,7 @@ const app = createApp({
                 if (result.success) {
                     statusText.value = '整理完成！成功 ' + result.success_count + ' 个，失败 ' + result.fail_count + ' 个';
                     loadFolders();
+                    updateMatchedFiles();  // 刷新高亮
                 }
             } catch (e) {
                 console.error('整理失败:', e);
