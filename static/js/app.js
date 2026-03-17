@@ -1101,8 +1101,56 @@ const app = createApp({
             });
 
             matchedFiles.value = set;
+
+            // 扫描包含已匹配文件的文件夹（未展开的文件夹也需要显示统计）
+            scanFoldersWithMatchedFiles(set);
+
             updateMatchedHighlight();
             refreshVideoHighlight();
+        };
+
+        // 扫描包含已匹配文件的文件夹
+        const scanFoldersWithMatchedFiles = async (matchedSet) => {
+            if (matchedSet.size === 0) return;
+
+            // 收集所有匹配文件的目录路径
+            const matchedDirs = new Set();
+            matchedSet.forEach(path => {
+                // 获取文件的直接父目录
+                const dir = path.substring(0, path.lastIndexOf('/'));
+                if (dir) matchedDirs.add(dir);
+            });
+
+            // 找出需要扫描的文件夹（folders.value 中存在的文件夹，其路径是匹配文件的祖先）
+            const foldersToScan = new Map(); // path -> folderObj
+
+            const checkFolder = (folder) => {
+                matchedDirs.forEach(dir => {
+                    // 如果匹配文件的父目录是这个文件夹的子目录，则需要扫描这个文件夹
+                    if (dir.startsWith(folder.path + '/')) {
+                        if (!folderCache[folder.path]) {
+                            foldersToScan.set(folder.path, folder);
+                        }
+                    }
+                });
+                // 递归检查子文件夹
+                if (folder.children) {
+                    folder.children.forEach(checkFolder);
+                }
+            };
+
+            folders.value.forEach(checkFolder);
+
+            // 扫描需要更新的文件夹
+            for (const folder of foldersToScan.values()) {
+                await scanFolder(folder);
+                // 扫描后更新文件夹的统计信息
+                const cached = folderCache[folder.path];
+                if (cached) {
+                    folder.video_count = cached.video_count;
+                    folder.matched_count = cached.matched_count;
+                }
+            }
         };
 
         // 刷新视频列表标绿
