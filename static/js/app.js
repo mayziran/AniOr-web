@@ -562,12 +562,16 @@ const app = createApp({
 
             if (!originalFolder.expanded) {
                 // 展开 - 检查缓存或扫描
+                // 一级文件夹需要扫描子文件夹结构，子文件夹不需要
+                const isTopLevel = folders.value.some(f => f.path === originalFolder.path);
                 const cacheKey = originalFolder.path;
                 let result = folderCache[cacheKey];
 
                 if (!result) {
                     // 未扫描过，先扫描
-                    result = await scanFolder(originalFolder);
+                    // 一级文件夹：扫描所有视频 + 子文件夹结构 (rootOnly: false)
+                    // 子文件夹：只扫描根目录视频 (rootOnly: true)
+                    result = await scanFolder(originalFolder, { rootOnly: !isTopLevel });
                 }
 
                 if (result) {
@@ -677,34 +681,72 @@ const app = createApp({
             selectedVideos.value.clear();
             statusText.value = '正在加载视频...';
 
-            // 扫描完整数据（包含所有子文件夹）
-            const folderData = await scanFolder(targetFolder, { rootOnly: false });
+            // 判断是否是一级文件夹（在 folders.value 顶层）
+            const isTopLevel = folders.value.some(f => f.path === targetFolder.path);
 
-            if (folderData) {
-                // 视频列表只显示当前文件夹根目录的视频（不是子文件夹的）
-                const folderPath = targetFolder.path.replace(/\\/g, '/').replace(/\/$/, '');
-                const rootVideos = (folderData.videos || []).filter(v => {
-                    const videoPath = v.path.replace(/\\/g, '/');
-                    const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
-                    return videoDir === folderPath;
-                });
-                videos.value = rootVideos;
-                // 应用保存的排序状态
-                sortVideos(videoSortBy.value, videoSortAsc.value);
+            if (isTopLevel) {
+                // 一级文件夹：扫描所有视频（含子文件夹）+ 子文件夹结构
+                const folderData = await scanFolder(targetFolder, { rootOnly: false });
 
-                // matched_count 统计所有视频（含子文件夹），与原版一致
-                const allVideos = folderData.videos || [];
-                targetFolder.matched_count = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
-                targetFolder.video_count = allVideos.length;
+                if (folderData) {
+                    // 视频列表只显示当前文件夹根目录的视频（与原版一致）
+                    const folderPath = targetFolder.path.replace(/\\/g, '/').replace(/\/$/, '');
+                    const rootVideos = (folderData.videos || []).filter(v => {
+                        const videoPath = v.path.replace(/\\/g, '/');
+                        const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
+                        return videoDir === folderPath;
+                    });
+                    videos.value = rootVideos;
+                    // 应用保存的排序状态
+                    sortVideos(videoSortBy.value, videoSortAsc.value);
 
-                // 同时保存完整视频数据到当前文件夹对象
-                targetFolder._allVideos = allVideos;
+                    // matched_count 统计所有视频（含子文件夹），与原版一致
+                    const allVideos = folderData.videos || [];
+                    targetFolder.matched_count = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
+                    targetFolder.video_count = allVideos.length;
 
-                const folderName = targetFolder.name || targetFolder.path.split(/[/\\]/).pop();
-                statusText.value = '已加载 ' + videos.value.length + ' 个视频 - ' + folderName;
+                    // 同时保存完整视频数据到当前文件夹对象
+                    targetFolder._allVideos = allVideos;
+
+                    // 更新子文件夹结构
+                    if (folderData.subfolders && folderData.subfolders.length > 0) {
+                        targetFolder.children = folderData.subfolders.map(f => ({
+                            ...f,
+                            expanded: false,
+                            children: f.children || [],
+                            video_count: f.video_count,
+                            matched_count: f.matched_count,
+                            has_subfolders: f.has_subfolders
+                        }));
+                    }
+
+                    const folderName = targetFolder.name || targetFolder.path.split(/[/\\]/).pop();
+                    statusText.value = '已加载 ' + videos.value.length + ' 个视频 - ' + folderName;
+                } else {
+                    videos.value = [];
+                    statusText.value = '加载失败';
+                }
             } else {
-                videos.value = [];
-                statusText.value = '加载失败';
+                // 子文件夹：只扫描根目录视频（与原版一致）
+                const folderData = await scanFolder(targetFolder, { rootOnly: true });
+
+                if (folderData) {
+                    // 子文件夹直接使用返回的视频列表（已经是根目录视频）
+                    videos.value = folderData.videos || [];
+                    // 应用保存的排序状态
+                    sortVideos(videoSortBy.value, videoSortAsc.value);
+
+                    // matched_count 统计所有视频（含子文件夹），与原版一致
+                    const allVideos = folderData.videos || [];
+                    targetFolder.matched_count = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
+                    targetFolder.video_count = allVideos.length;
+
+                    const folderName = targetFolder.name || targetFolder.path.split(/[/\\]/).pop();
+                    statusText.value = '已加载 ' + videos.value.length + ' 个视频 - ' + folderName;
+                } else {
+                    videos.value = [];
+                    statusText.value = '加载失败';
+                }
             }
             updateMatchedHighlight();
             refreshVideoHighlight();
@@ -718,34 +760,54 @@ const app = createApp({
             selectedVideos.value.clear();
             statusText.value = '正在刷新视频...';
 
-            // 重新扫描完整数据
-            const folderData = await scanFolder({ path: selectedFolder.value }, { rootOnly: false });
+            // 判断是否是一级文件夹
+            const isTopLevel = folders.value.some(f => f.path === selectedFolder.value);
 
-            if (folderData) {
-                // 只显示当前文件夹根目录的视频
-                const folderPath = selectedFolder.value.replace(/\\/g, '/').replace(/\/$/, '');
-                const rootVideos = (folderData.videos || []).filter(v => {
-                    const videoPath = v.path.replace(/\\/g, '/');
-                    const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
-                    return videoDir === folderPath;
-                });
-                videos.value = rootVideos;
-                // 应用保存的排序状态
-                sortVideos(videoSortBy.value, videoSortAsc.value);
+            if (isTopLevel) {
+                // 一级文件夹：重新扫描完整数据
+                const folderData = await scanFolder({ path: selectedFolder.value }, { rootOnly: false });
 
-                // 更新 matched_count 统计所有视频（含子文件夹），与原版一致
-                const folder = findFolderByPath(folders.value, selectedFolder.value);
-                if (folder) {
-                    const allVideos = folderData.videos || [];
-                    folder.matched_count = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
-                    folder.video_count = allVideos.length;
-                    folder._allVideos = allVideos;
+                if (folderData) {
+                    // 只显示当前文件夹根目录的视频
+                    const folderPath = selectedFolder.value.replace(/\\/g, '/').replace(/\/$/, '');
+                    const rootVideos = (folderData.videos || []).filter(v => {
+                        const videoPath = v.path.replace(/\\/g, '/');
+                        const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
+                        return videoDir === folderPath;
+                    });
+                    videos.value = rootVideos;
+                    // 应用保存的排序状态
+                    sortVideos(videoSortBy.value, videoSortAsc.value);
+
+                    // 更新 matched_count 统计所有视频（含子文件夹），与原版一致
+                    const folder = findFolderByPath(folders.value, selectedFolder.value);
+                    if (folder) {
+                        const allVideos = folderData.videos || [];
+                        folder.matched_count = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
+                        folder.video_count = allVideos.length;
+                        folder._allVideos = allVideos;
+                    }
+                    const folderName = selectedFolder.value.split(/[/\\]/).pop();
+                    statusText.value = '已刷新 ' + videos.value.length + ' 个视频 - ' + folderName;
+                } else {
+                    videos.value = [];
+                    statusText.value = '刷新失败';
                 }
-                const folderName = selectedFolder.value.split(/[/\\]/).pop();
-                statusText.value = '已刷新 ' + videos.value.length + ' 个视频 - ' + folderName;
             } else {
-                videos.value = [];
-                statusText.value = '刷新失败';
+                // 子文件夹：只扫描根目录视频
+                const folderData = await scanFolder({ path: selectedFolder.value }, { rootOnly: true });
+
+                if (folderData) {
+                    videos.value = folderData.videos || [];
+                    // 应用保存的排序状态
+                    sortVideos(videoSortBy.value, videoSortAsc.value);
+
+                    const folderName = selectedFolder.value.split(/[/\\]/).pop();
+                    statusText.value = '已刷新 ' + videos.value.length + ' 个视频 - ' + folderName;
+                } else {
+                    videos.value = [];
+                    statusText.value = '刷新失败';
+                }
             }
             updateMatchedHighlight();
             refreshVideoHighlight();
