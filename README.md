@@ -36,6 +36,24 @@ services:
       - TZ=Asia/Shanghai
 ```
 
+### 密码保护（可选）
+
+通过环境变量 `ADMIN_PASSWORD` 启用登录验证：
+
+```yaml
+environment:
+  - ADMIN_PASSWORD=your_password_here
+  - SECRET_KEY=your_random_secret_key
+```
+
+- 不设置 `ADMIN_PASSWORD` 时，无需登录
+- `SECRET_KEY` 用于签名 session，建议设置（本地开发可用默认值）
+
+生成随机密钥：
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
 ### 启动命令
 
 ```bash

@@ -24,6 +24,82 @@ body {
     height: 100vh;
 }
 
+/* 登录页面 */
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-box {
+    background: white;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    width: 320px;
+}
+
+.login-box h1 {
+    margin: 0 0 10px;
+    color: #333;
+    font-size: 28px;
+}
+
+.login-subtitle {
+    color: #666;
+    margin-bottom: 30px;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.login-form input {
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+.login-form input:focus {
+    border-color: #667eea;
+}
+
+.login-form button {
+    padding: 12px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.login-form button:hover {
+    background: #5568d3;
+}
+
+.login-error {
+    color: #e74c3c;
+    margin-top: 15px;
+    font-size: 13px;
+}
+
+/* 隐藏主应用内容 */
+.main-content {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
 /* 工具栏 */
 .toolbar {
     display: flex;

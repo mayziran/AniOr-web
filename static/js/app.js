@@ -84,6 +84,12 @@ const app = createApp({
         const dirEntries = ref([]);
         const dirEntriesLoading = ref(false);
 
+        // 登录状态
+        const isLoggedIn = ref(true);  // 默认 true，避免不需要登录时闪烁
+        const passwordRequired = ref(false);  // 是否需要密码登录
+        const loginPassword = ref('');
+        const loginError = ref('');
+
         // ============ 计算属性 ============
 
         // 扁平化文件夹树（用于渲染）
@@ -229,6 +235,63 @@ const app = createApp({
             } catch (e) {
                 console.error('保存配置失败:', e);
                 alert('保存配置失败: ' + e.message);
+            }
+        };
+
+        // 登录相关
+        const checkLogin = async () => {
+            try {
+                const res = await fetch('/api/check-login');
+                const data = await res.json();
+                if (data.success) {
+                    isLoggedIn.value = data.logged_in;
+                    passwordRequired.value = data.password_required || false;
+                }
+            } catch (e) {
+                console.error('检查登录状态失败:', e);
+                isLoggedIn.value = true;  // 失败时假设不需要登录
+            }
+        };
+
+        const doLogin = async () => {
+            loginError.value = '';
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: loginPassword.value })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    isLoggedIn.value = true;
+                    loginPassword.value = '';
+                    loadConfig().then(() => {
+                        loadFolders();
+                    });
+                } else {
+                    loginError.value = data.error || '登录失败';
+                }
+            } catch (e) {
+                loginError.value = '登录失败: ' + e.message;
+            }
+        };
+
+        const doLogout = async () => {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                isLoggedIn.value = false;
+                // 清空数据
+                folders.value = [];
+                videos.value = [];
+                selectedFolder.value = null;
+                selectedVideos.clear();
+                searchResults.value = [];
+                selectedMedia.value = null;
+                batchFiles.value = [];
+                movieFiles.value = [];
+                extrasFiles.value = [];
+            } catch (e) {
+                console.error('退出登录失败:', e);
             }
         };
 
@@ -1332,8 +1395,13 @@ const app = createApp({
         // ============ 初始化 ============
 
         onMounted(() => {
-            loadConfig().then(() => {
-                loadFolders();
+            // 先检查登录状态
+            checkLogin().then(() => {
+                if (isLoggedIn.value) {
+                    loadConfig().then(() => {
+                        loadFolders();
+                    });
+                }
             });
 
             // 监听键盘事件：Ctrl+A 全选视频
@@ -1388,6 +1456,12 @@ const app = createApp({
             dirPickerPath,
             dirEntries,
             dirEntriesLoading,
+
+            // 登录状态
+            isLoggedIn,
+            passwordRequired,
+            loginPassword,
+            loginError,
 
             // 计算属性
             folderMatchCounts,
@@ -1444,7 +1518,12 @@ const app = createApp({
             loadRootDirs,
             loadDirEntries,
             selectDirEntry,
-            confirmDirSelection
+            confirmDirSelection,
+
+            // 登录方法
+            checkLogin,
+            doLogin,
+            doLogout
         };
     }
 });

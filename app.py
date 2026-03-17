@@ -5,17 +5,31 @@ Flask Web Application - AniOr Web
 import os
 import time
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, session
 
 from backend.config import Config
 from backend.tmdb import TMDBClient
 from backend.organizer import Organizer
 
 app = Flask(__name__)
-app.secret_key = 'anior-web-secret-key'
+app.secret_key = os.environ.get('SECRET_KEY', 'anior-web-secret-key')
+
+# 密码认证（通过环境变量 ADMIN_PASSWORD 设置）
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
 
 # 全局配置实例
 config = Config()
+
+
+def login_required(f):
+    """登录装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if ADMIN_PASSWORD and not session.get('logged_in'):
+            return jsonify({'success': False, 'error': '请先登录'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 # 一级文件夹缓存
 _folder_cache = {
@@ -31,7 +45,39 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/api/login', methods=['POST'])
+def login():
+    """登录验证"""
+    if not ADMIN_PASSWORD:
+        return jsonify({'success': True, 'message': '未启用密码认证'})
+
+    data = request.json or {}
+    password = data.get('password', '')
+
+    if password == ADMIN_PASSWORD:
+        session['logged_in'] = True
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': '密码错误'}), 401
+
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """退出登录"""
+    session.pop('logged_in', None)
+    return jsonify({'success': True})
+
+
+@app.route('/api/check-login', methods=['GET'])
+def check_login():
+    """检查登录状态"""
+    password_required = bool(ADMIN_PASSWORD)
+    logged_in = session.get('logged_in', False) if ADMIN_PASSWORD else True
+    return jsonify({'success': True, 'logged_in': logged_in, 'password_required': password_required})
+
+
 @app.route('/api/config', methods=['GET', 'POST'])
+@login_required
 def handle_config():
     """获取/保存配置"""
     if request.method == 'GET':
@@ -48,6 +94,7 @@ def handle_config():
 
 
 @app.route('/api/folders', methods=['GET'])
+@login_required
 def get_folders():
     """加载文件夹列表（带缓存，只有刷新或源目录改变时才重新扫描）"""
     global _folder_cache
@@ -162,6 +209,7 @@ def _scan_immediate_folders(folder_path):
 
 
 @app.route('/api/scan-folder', methods=['GET'])
+@login_required
 def scan_folder():
     """扫描指定文件夹"""
     folder_path = request.args.get('path')
@@ -256,6 +304,7 @@ def scan_folder():
 
 
 @app.route('/api/videos', methods=['GET'])
+@login_required
 def get_videos():
     """加载视频列表"""
     folder_path = request.args.get('path')
@@ -310,6 +359,7 @@ def get_videos():
 
 
 @app.route('/api/browse-dir', methods=['GET'])
+@login_required
 def browse_dir():
     """浏览目录"""
     path = request.args.get('path', '')
@@ -355,6 +405,7 @@ def browse_dir():
 
 
 @app.route('/api/tmdb/search', methods=['POST'])
+@login_required
 def tmdb_search():
     """TMDB 搜索"""
     data = request.json or {}
@@ -417,6 +468,7 @@ def tmdb_search():
 
 
 @app.route('/api/tmdb/details', methods=['GET'])
+@login_required
 def tmdb_details():
     """获取 TMDB 详情"""
     tmdb_id = request.args.get('id', type=int)
@@ -511,6 +563,7 @@ def tmdb_details():
 
 
 @app.route('/api/organize', methods=['POST'])
+@login_required
 def organize():
     """执行整理"""
     data = request.json or {}
@@ -528,6 +581,7 @@ def organize():
 
 
 @app.route('/api/organize-extras', methods=['POST'])
+@login_required
 def organize_extras():
     """整理选中文件到 extras 文件夹"""
     from backend.file_ops import FileOperator
@@ -565,6 +619,7 @@ def organize_extras():
 
 
 @app.route('/api/scan-unmatched', methods=['POST'])
+@login_required
 def scan_unmatched():
     """扫描未匹配文件"""
     data = request.json or {}
@@ -602,6 +657,7 @@ def scan_unmatched():
 
 
 @app.route('/api/check-volume', methods=['GET'])
+@login_required
 def check_volume():
     """检查两个路径是否在同一个卷（仅硬链接需要）"""
     path1 = request.args.get('path1', '')
