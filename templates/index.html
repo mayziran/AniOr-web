@@ -219,6 +219,9 @@
                                      :class="{ active: currentSeason === season.season_number }"
                                      @click="selectSeason(season.season_number)">
                                     {{ season.name || 'S' + season.season_number }}
+                                    <span v-if="season.episode_count" class="season-match-count">
+                                        ({{ getSeasonMatchedCount(season.season_number) }}/{{ season.episode_count }})
+                                    </span>
                                 </div>
                             </div>
                         </div>

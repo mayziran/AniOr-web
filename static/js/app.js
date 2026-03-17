@@ -237,6 +237,17 @@ const app = createApp({
             return count;
         });
 
+        // 获取指定季度的已匹配数量
+        const getSeasonMatchedCount = (seasonNum) => {
+            const sn = Number(seasonNum);
+            if (isNaN(sn)) return 0;
+
+            // 从 seasonFileMappings 获取该季度的已匹配数量
+            const mapping = seasonFileMappings[sn];
+            if (!mapping) return 0;
+            return Object.keys(mapping).length;
+        };
+
         const canOrganize = computed(() => {
             return matchedCount.value > 0 && config.target_dir;
         });
@@ -1693,6 +1704,7 @@ const app = createApp({
             removeExtrasFile,
             clearExtras,
             clearSeasonMatches,
+            getSeasonMatchedCount,
             searchTmdb,
             selectMedia,
             selectSeason,

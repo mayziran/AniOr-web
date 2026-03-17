@@ -765,6 +765,12 @@ body {
     font-weight: bold;
 }
 
+.season-match-count {
+    font-size: 11px;
+    color: #666;
+    font-weight: normal;
+}
+
 /* Extras 标签 */
 .tab-btn.extras-tab {
     color: #4CAF50;
