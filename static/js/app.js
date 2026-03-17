@@ -41,6 +41,54 @@ const app = createApp({
         // 视频排序
         const videoSortBy = ref('name');
         const videoSortAsc = ref(true);
+        // 面板宽度（0 表示使用默认 flex 比例）
+        const leftPanelWidth = ref(0);
+
+        // 从 localStorage 加载用户设置
+        const loadUserSettings = () => {
+            try {
+                const settings = JSON.parse(localStorage.getItem('anior_settings') || '{}');
+                if (settings.folderSortBy) folderSortBy.value = settings.folderSortBy;
+                if (settings.folderSortAsc !== undefined) folderSortAsc.value = settings.folderSortAsc;
+                if (settings.videoSortBy) videoSortBy.value = settings.videoSortBy;
+                if (settings.videoSortAsc !== undefined) videoSortAsc.value = settings.videoSortAsc;
+                // 只有保存过面板宽度时才加载（0 表示使用默认 flex 比例）
+                if (settings.leftPanelWidth && settings.leftPanelWidth > 0) {
+                    leftPanelWidth.value = settings.leftPanelWidth;
+                }
+            } catch (e) {
+                console.error('加载设置失败:', e);
+            }
+        };
+
+        // 应用面板宽度（在 DOM 准备好后调用）
+        const applyPanelWidth = () => {
+            if (leftPanelWidth.value > 0) {
+                nextTick(() => {
+                    const leftPanel = document.querySelector('.left-panel');
+                    if (leftPanel) {
+                        leftPanel.style.flex = 'none';
+                        leftPanel.style.width = leftPanelWidth.value + 'px';
+                    }
+                });
+            }
+        };
+
+        // 保存用户设置到 localStorage
+        const saveUserSettings = () => {
+            try {
+                const settings = {
+                    folderSortBy: folderSortBy.value,
+                    folderSortAsc: folderSortAsc.value,
+                    videoSortBy: videoSortBy.value,
+                    videoSortAsc: videoSortAsc.value,
+                    leftPanelWidth: leftPanelWidth.value
+                };
+                localStorage.setItem('anior_settings', JSON.stringify(settings));
+            } catch (e) {
+                console.error('保存设置失败:', e);
+            }
+        };
 
         // 搜索
         const searchQuery = ref('');
@@ -402,6 +450,8 @@ const app = createApp({
                         video_count: null,  // 未扫描
                         matched_count: null
                     }));
+                    // 应用保存的排序状态
+                    sortFolders(folderSortBy.value, folderSortAsc.value);
                     statusText.value = '已加载 ' + folders.value.length + ' 个文件夹' + (data.cached ? ' (缓存)' : '');
                 } else {
                     folders.value = [];
@@ -501,12 +551,15 @@ const app = createApp({
         };
 
         // 文件夹排序
-        const sortFolders = (field) => {
-            if (folderSortBy.value === field) {
-                folderSortAsc.value = !folderSortAsc.value;
-            } else {
+        const sortFolders = (field, forceDirection = null) => {
+            // forceDirection 为 true 时强制升序，false 强制降序，null 时切换
+            if (forceDirection !== null) {
+                folderSortAsc.value = forceDirection;
+            } else if (folderSortBy.value !== field) {
                 folderSortBy.value = field;
                 folderSortAsc.value = true;
+            } else {
+                folderSortAsc.value = !folderSortAsc.value;
             }
             // 重新排序
             const sorted = [...folders.value].sort((a, b) => {
@@ -526,15 +579,19 @@ const app = createApp({
                 return 0;
             });
             folders.value = sorted;
+            saveUserSettings();
         };
 
         // 视频排序
-        const sortVideos = (field) => {
-            if (videoSortBy.value === field) {
-                videoSortAsc.value = !videoSortAsc.value;
-            } else {
+        const sortVideos = (field, forceDirection = null) => {
+            // forceDirection 为 true 时强制升序，false 强制降序，null 时切换
+            if (forceDirection !== null) {
+                videoSortAsc.value = forceDirection;
+            } else if (videoSortBy.value !== field) {
                 videoSortBy.value = field;
                 videoSortAsc.value = true;
+            } else {
+                videoSortAsc.value = !videoSortAsc.value;
             }
             // 重新排序
             const sorted = [...videos.value].sort((a, b) => {
@@ -564,6 +621,7 @@ const app = createApp({
                 return 0;
             });
             videos.value = sorted;
+            saveUserSettings();
         };
 
         const selectFolder = async (folder) => {
@@ -587,6 +645,8 @@ const app = createApp({
                     return videoDepth === folderDepth + 1;
                 });
                 videos.value = rootVideos;
+                // 应用保存的排序状态
+                sortVideos(videoSortBy.value, videoSortAsc.value);
 
                 // matched_count 统计所有视频（含子文件夹），与原版一致
                 const allVideos = folderData.videos || [];
@@ -624,6 +684,8 @@ const app = createApp({
                     return videoDepth === folderDepth + 1;
                 });
                 videos.value = rootVideos;
+                // 应用保存的排序状态
+                sortVideos(videoSortBy.value, videoSortAsc.value);
 
                 // 更新 matched_count 统计所有视频（含子文件夹），与原版一致
                 const folder = findFolderByPath(folders.value, selectedFolder.value);
@@ -1388,6 +1450,12 @@ const app = createApp({
 
         const stopResizeV = () => {
             isResizingV = false;
+            // 保存面板宽度
+            const leftPanel = document.querySelector('.left-panel');
+            if (leftPanel) {
+                leftPanelWidth.value = leftPanel.offsetWidth;
+                saveUserSettings();
+            }
             document.removeEventListener('mousemove', doResizeV);
             document.removeEventListener('mouseup', stopResizeV);
         };
@@ -1395,6 +1463,11 @@ const app = createApp({
         // ============ 初始化 ============
 
         onMounted(() => {
+            // 加载用户设置（排序状态、面板宽度等）
+            loadUserSettings();
+            // 应用面板宽度
+            applyPanelWidth();
+
             // 先检查登录状态
             checkLogin().then(() => {
                 if (isLoggedIn.value) {

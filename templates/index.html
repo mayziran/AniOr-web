@@ -81,7 +81,7 @@
                              class="folder-item"
                              :class="{
                                  active: selectedFolder === item.path,
-                                 matched: item.video_count != null && item.matched_count === item.video_count,
+                                 matched: item.video_count != null && item.video_count > 0 && item.matched_count === item.video_count,
                                  'depth-0': item.depth === 0,
                                  'depth-1': item.depth === 1,
                                  'depth-2': item.depth === 2,
