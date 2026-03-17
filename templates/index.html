@@ -594,7 +594,7 @@
                                  class="unorganized-item" :class="{ duplicate: item.is_duplicate }">
                                 <label>
                                     <input type="checkbox" v-model="selectedUnorganized" :value="item.path">
-                                    {{ item.path.split(/[/\\]/).pop() }}
+                                    {{ item.path }}
                                 </label>
                             </div>
                         </div>

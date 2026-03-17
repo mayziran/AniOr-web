@@ -1267,34 +1267,33 @@ const app = createApp({
                 if (dir) matchedDirs.add(dir);
             });
 
-            // 找出需要扫描的文件夹（folders.value 中存在的文件夹，其路径是匹配文件的祖先）
-            const foldersToScan = new Map(); // path -> folderObj
+            // 找出需要刷新的文件夹（所有匹配的文件夹，不管是否缓存）
+            const foldersToRefresh = new Map(); // path -> folderObj
 
             const checkFolder = (folder) => {
                 matchedDirs.forEach(dir => {
-                    // 如果匹配文件的父目录是这个文件夹的子目录，则需要扫描这个文件夹
-                    if (dir.startsWith(folder.path + '/')) {
-                        if (!folderCache[folder.path]) {
-                            foldersToScan.set(folder.path, folder);
-                        }
+                    // 如果匹配文件的父目录是这个文件夹的子目录，则需要刷新这个文件夹
+                    if (dir.startsWith(folder.path + '/') || dir === folder.path) {
+                        foldersToRefresh.set(folder.path, folder);
                     }
                 });
-                // 递归检查子文件夹
-                if (folder.children) {
+                // 递归检查子文件夹（如果存在）
+                if (folder.children && folder.children.length > 0) {
                     folder.children.forEach(checkFolder);
                 }
             };
 
             folders.value.forEach(checkFolder);
 
-            // 扫描需要更新的文件夹
-            for (const folder of foldersToScan.values()) {
-                await scanFolder(folder);
-                // 扫描后更新文件夹的统计信息
-                const cached = folderCache[folder.path];
-                if (cached) {
-                    folder.video_count = cached.video_count;
-                    folder.matched_count = cached.matched_count;
+            // 刷新需要更新的文件夹统计信息
+            for (const [folderPath, folder] of foldersToRefresh.entries()) {
+                const cached = folderCache[folderPath];
+                if (cached && cached.videos) {
+                    // 从缓存中计算统计信息
+                    const allVideos = cached.videos;
+                    const matched = allVideos.filter(v => matchedSet.has(v.path)).length;
+                    folder.video_count = allVideos.length;
+                    folder.matched_count = matched;
                 }
             }
         };
@@ -1690,6 +1689,7 @@ const app = createApp({
                 const result = await res.json();
                 organizeResult.value = result;
                 selectedUnorganized.value = [];
+                selectAllUnorganized.value = false;  // 重置全选状态
                 showResultModal.value = true;
 
                 if (result.success) {
@@ -1833,10 +1833,11 @@ const app = createApp({
             // 应用面板宽度
             applyPanelWidth();
 
-            // 先检查登录状态
+            // 先检查登录状态和加载配置
             checkLogin().then(() => {
                 if (isLoggedIn.value) {
                     loadConfig().then(() => {
+                        // 加载文件夹列表（会使用后端缓存，不会重复扫描）
                         loadFolders();
                     });
                 }

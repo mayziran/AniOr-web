@@ -1428,7 +1428,7 @@ body {
 }
 
 .modal-box.result-modal {
-    width: 360px;
+    width: 600px;
 }
 
 .modal-header {
@@ -1634,7 +1634,7 @@ body {
 
 .unorganized-list {
     margin-top: 16px;
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
     border: 1px solid #ddd;
     border-radius: 4px;
@@ -1650,12 +1650,11 @@ body {
 }
 
 .unorganized-item {
-    padding: 6px 12px;
+    padding: 8px 12px;
     font-size: 13px;
     border-bottom: 1px solid #eee;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-all;
+    white-space: normal;
 }
 
 .unorganized-item:last-child {

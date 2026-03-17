@@ -724,10 +724,63 @@ def check_volume():
         })
 
 
+def _startup_scan():
+    """服务器启动时预扫描一级文件夹（同步执行，在 Flask 启动前完成）"""
+    import logging
+    
+    try:
+        source_dir = config.get('source_dir')
+        if not source_dir or not Path(source_dir).exists():
+            logging.info(f'[启动扫描] 源目录未配置或不存在：{source_dir}')
+            return
+        
+        # 扫描一级文件夹
+        folder_path = Path(source_dir)
+        folders = []
+        
+        for item in sorted(folder_path.iterdir(), key=lambda x: x.name.lower()):
+            if item.is_dir():
+                # 排除系统文件夹
+                system_folders = ['@eaDir', '.@__thumb', '.AppleDouble']
+                if item.name in system_folders:
+                    continue
+                
+                has_subfolders = any(sub.is_dir() for sub in item.iterdir())
+                try:
+                    mtime = item.stat().st_mtime
+                    folder_date = time.strftime('%Y-%m-%d %H:%M', time.localtime(mtime))
+                except:
+                    folder_date = ''
+                
+                folders.append({
+                    'name': item.name,
+                    'path': str(item),
+                    'has_subfolders': has_subfolders,
+                    'date': folder_date,
+                    'video_count': None,
+                    'matched_count': None
+                })
+        
+        # 更新全局缓存
+        global _folder_cache
+        _folder_cache = {
+            'source_dir': source_dir,
+            'folders': folders,
+            'timestamp': time.time()
+        }
+        logging.info(f'[启动扫描] 已预扫描 {len(folders)} 个一级文件夹')
+    except Exception as e:
+        logging.error(f'[启动扫描] 扫描失败：{e}')
+
+
 if __name__ == '__main__':
     import os
     # 检测是否在 Docker 容器中
     in_docker = os.path.exists('/.dockerenv')
     # Docker 默认关闭 debug，本地开发默认开启
     debug_mode = not in_docker
+    
+    # 服务器启动时预扫描一级文件夹（在 Flask 启动前完成）
+    _startup_scan()
+    
     app.run(host='0.0.0.0', port=5000, debug=debug_mode)
