@@ -554,6 +554,18 @@ const app = createApp({
             return null;
         };
 
+        // 在子文件夹树中查找指定路径的文件夹
+        const findSubfolder = (subfolders, path) => {
+            for (const sf of subfolders) {
+                if (sf.path.replace(/\\/g, '/') === path) return sf;
+                if (sf.children && sf.children.length > 0) {
+                    const found = findSubfolder(sf.children, path);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
         // 展开/折叠文件夹
         const toggleFolder = async (folder) => {
             // 找到原始 folder 对象
@@ -727,19 +739,58 @@ const app = createApp({
                     statusText.value = '加载失败';
                 }
             } else {
-                // 子文件夹：只扫描根目录视频（与原版一致）
-                const folderData = await scanFolder(targetFolder, { rootOnly: true });
+                // 子文件夹：从父文件夹的全量缓存中提取该子文件夹的所有视频
+                let folderData = null;
+                
+                // 遍历所有缓存，找到包含该子文件夹的父缓存
+                for (const [cacheKey, cacheValue] of Object.entries(folderCache)) {
+                    // 跳过 root 缓存
+                    if (cacheKey.endsWith('_root')) continue;
+                    
+                    const targetPathNormalized = targetFolder.path.replace(/\\/g, '/');
+                    // 检查该缓存是否包含目标子文件夹
+                    if (cacheValue.subfolders) {
+                        const childInCache = findSubfolder(cacheValue.subfolders, targetPathNormalized);
+                        if (childInCache) {
+                            // 从该缓存中提取属于这个子文件夹的所有视频
+                            const childVideos = (cacheValue.videos || []).filter(v => {
+                                const videoPath = v.path.replace(/\\/g, '/');
+                                return videoPath.startsWith(targetPathNormalized + '/');
+                            });
+                            
+                            folderData = {
+                                ...cacheValue,
+                                videos: childVideos,
+                                video_count: childVideos.length,
+                                matched_count: childVideos.filter(v => matchedFiles.value.has(v.path)).length
+                            };
+                            break;
+                        }
+                    }
+                }
+                
+                // 如果缓存中没有，调用 API 扫描
+                if (!folderData) {
+                    folderData = await scanFolder(targetFolder, { rootOnly: false });
+                }
 
                 if (folderData) {
-                    // 子文件夹直接使用返回的视频列表（已经是根目录视频）
-                    videos.value = folderData.videos || [];
+                    // 子文件夹显示该文件夹下的所有视频（包含子文件夹）
+                    // 但需要过滤出只属于该子文件夹根目录的视频
+                    const targetPathNormalized = targetFolder.path.replace(/\\/g, '/');
+                    const rootVideos = (folderData.videos || []).filter(v => {
+                        const videoPath = v.path.replace(/\\/g, '/');
+                        const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
+                        return videoDir === targetPathNormalized;
+                    });
+                    
+                    videos.value = rootVideos;
                     // 应用保存的排序状态
                     sortVideos(videoSortBy.value, videoSortAsc.value);
 
-                    // matched_count 统计所有视频（含子文件夹），与原版一致
-                    const allVideos = folderData.videos || [];
-                    targetFolder.matched_count = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
-                    targetFolder.video_count = allVideos.length;
+                    // matched_count 统计
+                    targetFolder.matched_count = (folderData.videos || []).filter(v => matchedFiles.value.has(v.path)).length;
+                    targetFolder.video_count = folderData.videos ? folderData.videos.length : 0;
 
                     const folderName = targetFolder.name || targetFolder.path.split(/[/\\]/).pop();
                     statusText.value = '已加载 ' + videos.value.length + ' 个视频 - ' + folderName;
