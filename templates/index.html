@@ -253,7 +253,7 @@
                             <!-- 模式切换 -->
                             <div class="mode-bar">
                                 <span class="mode-label">匹配模式：</span>
-                                <button class="mode-btn" :class="{ active: matchMode === 'batch' }" @click="matchMode = 'batch'">
+                                <button class="mode-btn" :class="{ active: matchMode === 'batch' }" @click="switchToBatchMode">
                                     📥 批量
                                 </button>
                                 <button class="mode-btn" :class="{ active: matchMode === 'single' }" @click="switchToSingleMode">
@@ -291,6 +291,9 @@
                                         <span class="match-ep">E{{ String(idx+1).padStart(2,'0') }}</span>
                                         <span class="match-name">{{ file.name }}</span>
                                         <button class="match-del" @click="removeBatchFile(idx)">✕</button>
+                                    </div>
+                                    <div class="batch-status">
+                                        ✓ 已匹配 {{ batchFiles.length }} 个文件 - 可拖动调整顺序
                                     </div>
                                 </div>
                             </div>

@@ -947,6 +947,17 @@ body {
     font-size: 12px;
 }
 
+.batch-status {
+    color: #4CAF50;
+    font-weight: bold;
+    font-size: 12px;
+    padding: 8px;
+    text-align: center;
+    background-color: #f0f8ff;
+    border-radius: 4px;
+    margin-top: 8px;
+}
+
 /* 单集模式 */
 .single-panel {
     flex: 1;
@@ -1298,6 +1309,16 @@ body {
     justify-content: space-between;
     align-items: center;
     border-top: 1px solid #ccc;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+}
+
+/* 为底部状态栏添加 padding，避免内容被遮挡 */
+.main-container {
+    padding-bottom: 28px;
 }
 
 .status-left {

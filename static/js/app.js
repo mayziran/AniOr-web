@@ -107,12 +107,36 @@ const app = createApp({
         // 匹配数据 - 每个季度独立保存
         const seasonBatchFiles = reactive({});  // {seasonNum: [files]}
         const seasonMatchedEpisodes = reactive({});  // {seasonNum_E + episodeNum: {path, name}}
+        const seasonMatchModes = reactive({});  // {seasonNum: 'batch' | 'single'}
         const seasonEpisodesCache = reactive({});  // {seasonNum: [episodes]} - TMDB 剧集信息缓存
+        const seasonFileMappings = reactive({});  // {seasonNum: {path: key}} - 每个季度的文件映射
         const batchFiles = ref([]);
         const movieFiles = ref([]);
         const extrasFiles = ref([]);
         const matchedEpisodes = reactive({});
         const matchedFiles = ref(new Set());
+
+        // 辅助函数：更新当前季度的 file_mappings
+        const updateCurrentSeasonFileMapping = () => {
+            const sn = Number(currentSeason.value);
+            if (isNaN(sn) || typeof currentSeason.value !== 'number') return;
+
+            const mapping = {};
+            if (matchMode.value === 'batch' && batchFiles.value.length > 0) {
+                batchFiles.value.forEach((f, idx) => {
+                    mapping[f.path] = `S${String(sn).padStart(2, '0')}E${String(idx + 1).padStart(2, '0')}`;
+                });
+            } else if (matchMode.value === 'single') {
+                // 只收集当前季度的单集匹配数据
+                const seasonPrefix = 'S' + String(sn).padStart(2, '0') + 'E';
+                Object.entries(matchedEpisodes).forEach(([key, ep]) => {
+                    if (key.startsWith(seasonPrefix) && ep && ep.path) {
+                        mapping[ep.path] = key;
+                    }
+                });
+            }
+            seasonFileMappings[sn] = mapping;
+        };
 
         // UI状态
         const showConfigModal = ref(false);
@@ -121,7 +145,7 @@ const app = createApp({
         const selectedUnorganized = ref([]);
         const selectAllUnorganized = ref(false);
         const pendingDirField = ref('');
-        const statusText = ref('就绪');
+        const statusText = ref('就绪 - 请先配置源目录、目标目录和 TMDB API Key');
 
         // 文件夹缓存 - 存储扫描结果
         const folderCache = reactive({});
@@ -656,12 +680,14 @@ const app = createApp({
                 // 同时保存完整视频数据到当前文件夹对象
                 targetFolder._allVideos = allVideos;
 
-                statusText.value = '已加载 ' + videos.value.length + ' 个视频';
+                const folderName = targetFolder.name || targetFolder.path.split(/[/\\]/).pop();
+                statusText.value = '已加载 ' + videos.value.length + ' 个视频 - ' + folderName;
             } else {
                 videos.value = [];
                 statusText.value = '加载失败';
             }
             updateMatchedHighlight();
+            refreshVideoHighlight();
         };
 
         const refreshVideos = async () => {
@@ -695,12 +721,14 @@ const app = createApp({
                     folder.video_count = allVideos.length;
                     folder._allVideos = allVideos;
                 }
-                statusText.value = '已刷新 ' + videos.value.length + ' 个视频';
+                const folderName = selectedFolder.value.split(/[/\\]/).pop();
+                statusText.value = '已刷新 ' + videos.value.length + ' 个视频 - ' + folderName;
             } else {
                 videos.value = [];
                 statusText.value = '刷新失败';
             }
             updateMatchedHighlight();
+            refreshVideoHighlight();
         };
 
         // ============ 右键菜单 ============
@@ -836,6 +864,7 @@ const app = createApp({
                 statusText.value = '已覆盖 ' + uniqueFiles.length + ' 个文件';
             }
 
+            updateCurrentSeasonFileMapping();
             updateMatchedFiles();
         };
 
@@ -851,16 +880,21 @@ const app = createApp({
             }
 
             const path = paths[0];
+            const key = 'S' + String(currentSeason.value).padStart(2, '0') + 'E' + String(epNum).padStart(2, '0');
 
-            // 检测是否已匹配（标绿）
-            if (matchedFiles.value.has(path)) {
+            // 获取当前行已匹配的文件（允许重新拖放同一文件到当前行）
+            const currentEp = matchedEpisodes[key];
+            const currentFilePath = currentEp ? currentEp.path : null;
+
+            // 检测是否已匹配（标绿）- 排除当前行已匹配的文件
+            if (matchedFiles.value.has(path) && path !== currentFilePath) {
                 alert('该文件已经在其他位置匹配，不能重复添加');
                 return;
             }
 
-            const key = 'S' + String(currentSeason.value).padStart(2, '0') + 'E' + String(epNum).padStart(2, '0');
             matchedEpisodes[key] = { path: path, name: path.split(/[/\\]/).pop() };
             statusText.value = 'E' + epNum + ' 已匹配: ' + path.split(/[/\\]/).pop();
+            updateCurrentSeasonFileMapping();
             updateMatchedFiles();
         };
 
@@ -868,6 +902,11 @@ const app = createApp({
         const onMovieDrop = (event, dropType) => {
             const paths = getDragPaths(event);
             if (!paths.length) return;
+
+            // 检查重复
+            if (checkDuplicateFiles(paths)) {
+                return;
+            }
 
             const newFiles = paths.map(p => {
                 const name = p.split(/[/\\]/).pop();
@@ -921,7 +960,9 @@ const app = createApp({
                 movieFiles.value = [...files];
             } else {
                 batchFiles.value = [...files];
+                updateCurrentSeasonFileMapping();
             }
+            updateMatchedFiles();
         };
 
         // Extras拖放
@@ -951,6 +992,7 @@ const app = createApp({
 
         const removeBatchFile = (index) => {
             batchFiles.value.splice(index, 1);
+            updateCurrentSeasonFileMapping();
             updateMatchedFiles();
         };
 
@@ -978,6 +1020,7 @@ const app = createApp({
         const cancelMatch = (epNum) => {
             const key = 'S' + String(currentSeason.value).padStart(2, '0') + 'E' + String(epNum).padStart(2, '0');
             delete matchedEpisodes[key];
+            updateCurrentSeasonFileMapping();
             updateMatchedFiles();
         };
 
@@ -1002,12 +1045,14 @@ const app = createApp({
                 batchFiles.value = [];
             } else {
                 // 清除当前季度的单集匹配
+                const seasonPrefix = 'S' + String(currentSeason.value).padStart(2, '0') + 'E';
                 Object.keys(matchedEpisodes).forEach(key => {
-                    if (key.startsWith(currentSeason.value + 'E')) {
+                    if (key.startsWith(seasonPrefix)) {
                         delete matchedEpisodes[key];
                     }
                 });
             }
+            updateCurrentSeasonFileMapping();
             updateMatchedFiles();
         };
 
@@ -1016,16 +1061,29 @@ const app = createApp({
         const updateMatchedFiles = () => {
             const set = new Set();
 
-            batchFiles.value.forEach(f => set.add(f.path));
+            // 剧场版和 Extras 始终计算
             movieFiles.value.forEach(f => set.add(f.path));
             extrasFiles.value.forEach(f => set.add(f.path));
 
-            Object.values(matchedEpisodes).forEach(ep => {
-                if (ep.path) set.add(ep.path);
+            // 收集所有季度的 file_mappings（包括批量和单集）
+            Object.values(seasonFileMappings).forEach(mapping => {
+                if (mapping) {
+                    Object.keys(mapping).forEach(path => set.add(path));
+                }
             });
 
             matchedFiles.value = set;
             updateMatchedHighlight();
+            refreshVideoHighlight();
+        };
+
+        // 刷新视频列表标绿
+        const refreshVideoHighlight = () => {
+            // 重新赋值整个数组，确保触发响应式更新
+            videos.value = videos.value.map(video => ({
+                ...video,
+                isMatched: matchedFiles.value.has(video.path)
+            }));
         };
 
         const updateMatchedHighlight = () => {
@@ -1062,7 +1120,8 @@ const app = createApp({
             if (matchMode.value === 'batch') {
                 return batchFiles.value.length > 0;
             } else {
-                return Object.keys(matchedEpisodes).some(k => k.startsWith(currentSeason.value + 'E'));
+                const seasonPrefix = 'S' + String(currentSeason.value).padStart(2, '0') + 'E';
+                return Object.keys(matchedEpisodes).some(k => k.startsWith(seasonPrefix));
             }
         });
 
@@ -1111,6 +1170,13 @@ const app = createApp({
             extrasFiles.value = [];
             Object.keys(matchedEpisodes).forEach(key => delete matchedEpisodes[key]);
             Object.keys(seasonEpisodesCache).forEach(key => delete seasonEpisodesCache[key]); // 清空剧集缓存
+            Object.keys(folderCache).forEach(key => delete folderCache[key]); // 清空文件夹缓存（与原版一致）
+            // 清空所有季度数据
+            Object.keys(seasonBatchFiles).forEach(key => delete seasonBatchFiles[key]);
+            Object.keys(seasonMatchedEpisodes).forEach(key => delete seasonMatchedEpisodes[key]);
+            Object.keys(seasonMatchModes).forEach(key => delete seasonMatchModes[key]);
+            Object.keys(seasonFileMappings).forEach(key => delete seasonFileMappings[key]);
+            statusText.value = '已选择：' + media.name;
 
             if (searchType.value === 'tv') {
                 try {
@@ -1159,9 +1225,20 @@ const app = createApp({
                     if (matchMode.value === 'batch') {
                         seasonBatchFiles[ps] = [...batchFiles.value];
                     } else {
-                        // 保存当前季度的单集匹配数据
-                        seasonMatchedEpisodes[ps] = {...matchedEpisodes};
+                        // 只保存当前季度的单集匹配数据
+                        const seasonPrefix = 'S' + String(ps).padStart(2, '0') + 'E';
+                        const seasonData = {};
+                        Object.entries(matchedEpisodes).forEach(([key, ep]) => {
+                            if (key.startsWith(seasonPrefix)) {
+                                seasonData[key] = ep;
+                            }
+                        });
+                        seasonMatchedEpisodes[ps] = seasonData;
                     }
+                    // 保存当前季度模式
+                    seasonMatchModes[ps] = matchMode.value;
+                    // 保存当前季度的 file_mappings
+                    updateCurrentSeasonFileMapping();
                 }
             }
 
@@ -1180,28 +1257,69 @@ const app = createApp({
             // 转为数字
             const sn = Number(seasonNum);
 
+            // 清空当前数据，只清空之前季度的数据
+            batchFiles.value = [];
+            if (prevSeason !== null && prevSeason !== 'extras') {
+                const ps = Number(prevSeason);
+                if (!isNaN(ps)) {
+                    const prevSeasonPrefix = 'S' + String(ps).padStart(2, '0') + 'E';
+                    Object.keys(matchedEpisodes).forEach(key => {
+                        if (key.startsWith(prevSeasonPrefix)) {
+                            delete matchedEpisodes[key];
+                        }
+                    });
+                }
+            }
+
             // 加载该季度的数据
-            if (seasonBatchFiles[sn]) {
+            if (seasonMatchModes[sn]) {
+                // 优先恢复模式
+                matchMode.value = seasonMatchModes[sn];
+                if (seasonMatchModes[sn] === 'batch' && seasonBatchFiles[sn]) {
+                    batchFiles.value = [...seasonBatchFiles[sn]];
+                } else if (seasonMatchModes[sn] === 'single' && seasonMatchedEpisodes[sn]) {
+                    // 只恢复当前季度的数据
+                    const seasonPrefix = 'S' + String(sn).padStart(2, '0') + 'E';
+                    Object.entries(seasonMatchedEpisodes[sn]).forEach(([key, ep]) => {
+                        if (key.startsWith(seasonPrefix)) {
+                            matchedEpisodes[key] = ep;
+                        }
+                    });
+                }
+            } else if (seasonBatchFiles[sn]) {
                 batchFiles.value = [...seasonBatchFiles[sn]];
                 matchMode.value = 'batch';
+                seasonMatchModes[sn] = 'batch';
             } else if (seasonMatchedEpisodes[sn]) {
-                Object.assign(matchedEpisodes, seasonMatchedEpisodes[sn]);
+                // 只恢复当前季度的数据
+                const seasonPrefix = 'S' + String(sn).padStart(2, '0') + 'E';
+                Object.entries(seasonMatchedEpisodes[sn]).forEach(([key, ep]) => {
+                    if (key.startsWith(seasonPrefix)) {
+                        matchedEpisodes[key] = ep;
+                    }
+                });
                 matchMode.value = 'single';
+                seasonMatchModes[sn] = 'single';
             } else {
                 // S0 默认单集模式，其他默认批量模式
                 if (sn === 0) {
                     matchMode.value = 'single';
+                    seasonMatchModes[sn] = 'single';
                 } else {
                     matchMode.value = 'batch';
+                    seasonMatchModes[sn] = 'batch';
                 }
-                batchFiles.value = [];
+            }
+
+            // 恢复后更新 file_mappings
+            if (!isNaN(sn)) {
+                updateCurrentSeasonFileMapping();
             }
 
             // 检查缓存
             if (seasonEpisodesCache[seasonNum]) {
                 episodes.value = seasonEpisodesCache[seasonNum];
                 episodesLoading.value = false;
-                updateMatchedFiles();
                 return;
             }
 
@@ -1216,15 +1334,38 @@ const app = createApp({
                 console.error('获取季度详情失败:', e);
             } finally {
                 episodesLoading.value = false;
-                updateMatchedFiles();
             }
         };
 
         const switchToSingleMode = () => {
+            // 切换到单集模式：直接清空批量数据（与原版一致，不保存）
+            batchFiles.value = [];
             matchMode.value = 'single';
-            if (episodes.value.length === 0) {
+            if (typeof currentSeason.value === 'number') {
+                seasonMatchModes[currentSeason.value] = 'single';
+            }
+            updateCurrentSeasonFileMapping();
+            updateMatchedFiles();
+            if (episodes.value.length === 0 && currentSeason.value !== 'extras') {
                 selectSeason(currentSeason.value);
             }
+        };
+
+        const switchToBatchMode = () => {
+            // 切换到批量模式：直接清空单集数据（与原版一致，不保存）
+            // 只清空当前季度的单集匹配
+            const seasonPrefix = 'S' + String(currentSeason.value).padStart(2, '0') + 'E';
+            Object.keys(matchedEpisodes).forEach(key => {
+                if (key.startsWith(seasonPrefix)) {
+                    delete matchedEpisodes[key];
+                }
+            });
+            matchMode.value = 'batch';
+            if (typeof currentSeason.value === 'number') {
+                seasonMatchModes[currentSeason.value] = 'batch';
+            }
+            updateCurrentSeasonFileMapping();
+            updateMatchedFiles();
         };
 
         const clearMedia = () => {
@@ -1237,6 +1378,11 @@ const app = createApp({
             movieFiles.value = [];
             extrasFiles.value = [];
             Object.keys(matchedEpisodes).forEach(key => delete matchedEpisodes[key]);
+            // 清空所有季度数据
+            Object.keys(seasonBatchFiles).forEach(key => delete seasonBatchFiles[key]);
+            Object.keys(seasonMatchedEpisodes).forEach(key => delete seasonMatchedEpisodes[key]);
+            Object.keys(seasonMatchModes).forEach(key => delete seasonMatchModes[key]);
+            Object.keys(seasonFileMappings).forEach(key => delete seasonFileMappings[key]);
             updateMatchedFiles();
         };
 
@@ -1250,41 +1396,13 @@ const app = createApp({
                     fileMappings[f.path] = movieFiles.value.length === 1 ? 'movie' : `movie-cd${idx + 1}`;
                 });
             } else {
-                // 收集所有季度的批量匹配数据
-                Object.entries(seasonBatchFiles).forEach(([seasonNum, files]) => {
-                    // 跳过非数字的 key（如 'extras'）
+                // 直接合并所有季度的 file_mappings（每个季度已独立维护）
+                Object.entries(seasonFileMappings).forEach(([seasonNum, mapping]) => {
                     if (isNaN(Number(seasonNum))) return;
-                    if (files && files.length > 0) {
-                        const s = Number(seasonNum);
-                        files.forEach((f, idx) => {
-                            fileMappings[f.path] = `S${String(s).padStart(2, '0')}E${String(idx + 1).padStart(2, '0')}`;
-                        });
+                    if (mapping) {
+                        Object.assign(fileMappings, mapping);
                     }
                 });
-
-                // 收集当前季度的批量数据（仅当不是 Extras 时）
-                if (matchMode.value === 'batch' && batchFiles.value.length > 0 && typeof currentSeason.value === 'number') {
-                    const s = Number(currentSeason.value);
-                    batchFiles.value.forEach((f, idx) => {
-                        fileMappings[f.path] = `S${String(s).padStart(2, '0')}E${String(idx + 1).padStart(2, '0')}`;
-                    });
-                }
-
-                // 收集所有季度的单集匹配数据
-                Object.entries(seasonMatchedEpisodes).forEach(([, episodes]) => {
-                    if (episodes) {
-                        Object.entries(episodes).forEach(([key, ep]) => {
-                            if (ep.path) fileMappings[ep.path] = key;
-                        });
-                    }
-                });
-
-                // 收集当前季度的单集数据
-                if (matchMode.value === 'single') {
-                    Object.entries(matchedEpisodes).forEach(([key, ep]) => {
-                        if (ep.path) fileMappings[ep.path] = key;
-                    });
-                }
             }
 
             extrasFiles.value.forEach(f => {
@@ -1579,6 +1697,7 @@ const app = createApp({
             selectMedia,
             selectSeason,
             switchToSingleMode,
+            switchToBatchMode,
             clearMedia,
             organize,
             toggleSelectAllUnorganized,
