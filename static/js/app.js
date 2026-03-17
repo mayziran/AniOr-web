@@ -478,13 +478,22 @@ const app = createApp({
                 const res = await fetch(refresh ? url + '&refresh=true' : url);
                 const data = await res.json();
                 if (data.success) {
-                    folders.value = data.folders.map(f => ({
-                        ...f,
-                        expanded: false,
-                        children: [],
-                        video_count: null,  // 未扫描
-                        matched_count: null
-                    }));
+                    // 保留原有的展开状态和子文件夹数据
+                    const oldFoldersMap = new Map();
+                    folders.value.forEach(f => {
+                        oldFoldersMap.set(f.path, f);
+                    });
+
+                    folders.value = data.folders.map(f => {
+                        const old = oldFoldersMap.get(f.path);
+                        return {
+                            ...f,
+                            expanded: old ? old.expanded : false,
+                            children: old ? old.children : [],
+                            video_count: old ? old.video_count : null,
+                            matched_count: old ? old.matched_count : null
+                        };
+                    });
                     // 应用保存的排序状态
                     sortFolders(folderSortBy.value, folderSortAsc.value);
                     statusText.value = '已加载 ' + folders.value.length + ' 个文件夹' + (data.cached ? ' (缓存)' : '');
@@ -1030,7 +1039,15 @@ const app = createApp({
 
         const cancelMatch = (epNum) => {
             const key = 'S' + String(currentSeason.value).padStart(2, '0') + 'E' + String(epNum).padStart(2, '0');
+            const deletedPath = matchedEpisodes[key]?.path;
             delete matchedEpisodes[key];
+            // 如果批量列表中有这个文件，也移除
+            if (deletedPath && matchMode.value === 'batch') {
+                const idx = batchFiles.value.findIndex(f => f.path === deletedPath);
+                if (idx !== -1) {
+                    batchFiles.value.splice(idx, 1);
+                }
+            }
             updateCurrentSeasonFileMapping();
             updateMatchedFiles();
         };
