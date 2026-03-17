@@ -3,6 +3,7 @@
 """
 import os
 import re
+import fnmatch
 from pathlib import Path
 from typing import List, Tuple, Dict, Set, Optional
 
@@ -258,19 +259,57 @@ class Organizer:
         """获取文件夹中的视频文件（递归扫描子文件夹）"""
         video_extensions = self.config.get_video_extensions()
         videos = []
+        
+        # 群晖和系统文件夹排除列表
+        system_folders = ['@eaDir', '.@__thumb', '.AppleDouble']
+        
         if folder.exists() and folder.is_dir():
             for f in folder.rglob('*'):
                 if f.is_file() and f.suffix.lower() in video_extensions:
-                    videos.append(f)
+                    # 排除系统文件夹中的视频（虽然系统文件夹中通常不会有视频）
+                    is_system_folder = any(sys_folder in str(f) for sys_folder in system_folders)
+                    if not is_system_folder:
+                        videos.append(f)
         return videos
 
     def _get_folder_files(self, folder: Path) -> List[Path]:
-        """获取文件夹中的所有文件"""
+        """获取文件夹中的所有文件（排除系统文件）"""
+        # 群晖和系统文件排除列表
+        system_patterns = [
+            '@eaDir',           # 群晖缩略图文件夹
+            '.@__thumb',        # 群晖缩略图文件夹
+            'SYNOINDEX_*',      # 群晖索引文件
+            '.DS_Store',        # macOS 系统文件
+            'Thumbs.db',        # Windows 缩略图缓存
+            '.AppleDouble',     # macOS 资源叉
+            '._*',              # macOS 隐藏文件
+        ]
+        
         files = []
         if folder.exists() and folder.is_dir():
             for f in folder.rglob('*'):
                 if f.is_file():
-                    files.append(f)
+                    # 检查是否是系统文件
+                    is_system_file = False
+                    file_name = f.name
+                    for pattern in system_patterns:
+                        if pattern.endswith('*'):
+                            # 处理通配符模式
+                            prefix = pattern[:-1]
+                            if file_name.startswith(prefix):
+                                is_system_file = True
+                                break
+                        elif '*' in pattern:
+                            # 处理带通配符的模式
+                            if fnmatch.fnmatch(file_name, pattern):
+                                is_system_file = True
+                                break
+                        elif file_name == pattern:
+                            is_system_file = True
+                            break
+                    
+                    if not is_system_file:
+                        files.append(f)
         return files
 
     def _move_subtitles(self, video_src: Path, target_folder: Path, ep_key: Optional[str],

@@ -230,6 +230,9 @@ def scan_folder():
     subfolders = []
 
     try:
+        # 群晖和系统文件夹排除列表（用于排除系统文件夹）
+        system_folders = ['@eaDir', '.@__thumb', '.AppleDouble']
+
         # 根据 root_only 参数决定扫描方式
         if root_only:
             # 只扫描根目录视频，不扫描子文件夹
@@ -252,8 +255,12 @@ def scan_folder():
                 try:
                     for item in sorted(parent_path.iterdir(), key=lambda x: x.name.lower()):
                         if item.is_dir():
+                            # 排除系统文件夹
+                            if item.name in system_folders:
+                                continue
                             # 检查该文件夹下是否有视频
-                            folder_videos = [f for f in item.rglob('*') if f.is_file() and f.suffix.lower() in video_extensions]
+                            folder_videos = [f for f in item.rglob('*')
+                                           if f.is_file() and f.suffix.lower() in video_extensions]
                             if folder_videos:
                                 # 递归获取子文件夹
                                 children = get_subfolders(item, depth + 1)
@@ -280,7 +287,9 @@ def scan_folder():
 
         # 统计当前文件夹根目录的视频数量
         root_video_count = sum(1 for f in folder.glob('*') if f.is_file() and f.suffix.lower() in video_extensions)
-        root_matched_count = sum(1 for f in folder.glob('*') if f.is_file() and f.suffix.lower() in video_extensions and str(f) in matched_files)
+        root_matched_count = sum(1 for f in folder.glob('*')
+                                if f.is_file() and f.suffix.lower() in video_extensions
+                                and str(f) in matched_files)
 
     except Exception as e:
         return jsonify({
