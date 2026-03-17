@@ -1198,7 +1198,7 @@ const app = createApp({
             extrasFiles.value = [];
             Object.keys(matchedEpisodes).forEach(key => delete matchedEpisodes[key]);
             Object.keys(seasonEpisodesCache).forEach(key => delete seasonEpisodesCache[key]); // 清空剧集缓存
-            Object.keys(folderCache).forEach(key => delete folderCache[key]); // 清空文件夹缓存（与原版一致）
+            // 不清空 folderCache（与原版一致，原版不清空文件夹缓存）
             // 清空所有季度数据
             Object.keys(seasonBatchFiles).forEach(key => delete seasonBatchFiles[key]);
             Object.keys(seasonMatchedEpisodes).forEach(key => delete seasonMatchedEpisodes[key]);
