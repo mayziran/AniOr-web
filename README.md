@@ -12,17 +12,44 @@
 - 📦 未匹配视频自动归入 extras
 - 🔗 硬链接 / ✂️ 剪切 / 📋 复制三种模式
 
-## 快速开始
+## Docker 部署
+
+### docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  anior:
+    image: mayziran/anior:latest
+    container_name: anior
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - "5000:5000"
+    volumes:
+      # 修改为你的视频目录
+      - /你的视频目录:/data
+      # 配置文件持久化
+      - ./config:/app/config
+    environment:
+      - TZ=Asia/Shanghai
+```
+
+### 启动命令
 
 ```bash
 # 启动
 docker-compose up -d
 
-# 访问
-http://localhost:5000
+# 查看日志
+docker-compose logs -f
+
+# 停止
+docker-compose down
 ```
 
-> 修改 `docker-compose.yml` 中的 `/你的视频目录` 为实际路径
+> 修改 `/你的视频目录` 为实际路径
 
 ## 配置
 
