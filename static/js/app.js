@@ -682,11 +682,11 @@ const app = createApp({
 
             if (folderData) {
                 // 视频列表只显示当前文件夹根目录的视频（不是子文件夹的）
-                const folderPath = targetFolder.path;
-                const folderDepth = folderPath.split(/[/\\]/).length;
+                const folderPath = targetFolder.path.replace(/\\/g, '/').replace(/\/$/, '');
                 const rootVideos = (folderData.videos || []).filter(v => {
-                    const videoDepth = v.path.split(/[/\\]/).length;
-                    return videoDepth === folderDepth + 1;
+                    const videoPath = v.path.replace(/\\/g, '/');
+                    const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
+                    return videoDir === folderPath;
                 });
                 videos.value = rootVideos;
                 // 应用保存的排序状态
@@ -723,11 +723,11 @@ const app = createApp({
 
             if (folderData) {
                 // 只显示当前文件夹根目录的视频
-                const folderPath = selectedFolder.value;
-                const folderDepth = folderPath.split(/[/\\]/).length;
+                const folderPath = selectedFolder.value.replace(/\\/g, '/').replace(/\/$/, '');
                 const rootVideos = (folderData.videos || []).filter(v => {
-                    const videoDepth = v.path.split(/[/\\]/).length;
-                    return videoDepth === folderDepth + 1;
+                    const videoPath = v.path.replace(/\\/g, '/');
+                    const videoDir = videoPath.substring(0, videoPath.lastIndexOf('/'));
+                    return videoDir === folderPath;
                 });
                 videos.value = rootVideos;
                 // 应用保存的排序状态
@@ -1366,6 +1366,10 @@ const app = createApp({
         };
 
         const switchToSingleMode = () => {
+            // 保存当前季度的 file_mappings（防止被覆盖为空）
+            const sn = currentSeason.value;
+            const savedMapping = (typeof sn === 'number' && seasonFileMappings[sn]) ? {...seasonFileMappings[sn]} : {};
+
             // 切换到单集模式：直接清空批量数据（与原版一致，不保存）
             batchFiles.value = [];
             matchMode.value = 'single';
@@ -1373,6 +1377,12 @@ const app = createApp({
                 seasonMatchModes[currentSeason.value] = 'single';
             }
             updateCurrentSeasonFileMapping();
+
+            // 恢复保存的映射（防止高亮消失）
+            if (Object.keys(seasonFileMappings[sn] || {}).length === 0 && Object.keys(savedMapping).length > 0) {
+                seasonFileMappings[sn] = savedMapping;
+            }
+
             updateMatchedFiles();
             if (episodes.value.length === 0 && currentSeason.value !== 'extras') {
                 selectSeason(currentSeason.value);
@@ -1380,6 +1390,10 @@ const app = createApp({
         };
 
         const switchToBatchMode = () => {
+            // 保存当前季度的 file_mappings（防止被覆盖为空）
+            const sn = currentSeason.value;
+            const savedMapping = (typeof sn === 'number' && seasonFileMappings[sn]) ? {...seasonFileMappings[sn]} : {};
+
             // 切换到批量模式：直接清空单集数据（与原版一致，不保存）
             // 只清空当前季度的单集匹配
             const seasonPrefix = 'S' + String(currentSeason.value).padStart(2, '0') + 'E';
@@ -1393,6 +1407,12 @@ const app = createApp({
                 seasonMatchModes[currentSeason.value] = 'batch';
             }
             updateCurrentSeasonFileMapping();
+
+            // 恢复保存的映射（防止高亮消失）
+            if (Object.keys(seasonFileMappings[sn] || {}).length === 0 && Object.keys(savedMapping).length > 0) {
+                seasonFileMappings[sn] = savedMapping;
+            }
+
             updateMatchedFiles();
         };
 
