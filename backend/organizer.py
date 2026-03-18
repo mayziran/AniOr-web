@@ -20,7 +20,8 @@ class Organizer:
 
     def organize(self, file_mappings: Dict[str, str], content_type: str,
                  tv_info: dict = None, movie_info: dict = None,
-                 auto_extras: bool = True, scan_unorganized: bool = True) -> Dict:
+                 auto_extras: bool = True, scan_unorganized: bool = True,
+                 folder_videos: Dict[str, List[str]] = None) -> Dict:
         """
         执行整理操作
 
@@ -31,6 +32,7 @@ class Organizer:
             movie_info: 电影信息 (content_type="movie" 时需要)
             auto_extras: 未匹配视频自动归入 extras
             scan_unorganized: 整理后扫描未整理文件
+            folder_videos: 前端传来的文件夹视频缓存 {文件夹路径：[视频路径列表]}
 
         Returns:
             整理结果字典
@@ -78,24 +80,13 @@ class Organizer:
             if ep_key == "extras":
                 extras_files.append(src)
 
-        # 2. auto_extras: 扫描未匹配文件并添加到 extras_files
-        if auto_extras:
-            source_dir = Path(self.config.get('source_dir', ''))
-            if source_dir.exists():
-                anime_folders = set()
-                for f in file_mappings.keys():
-                    try:
-                        relative = Path(f).relative_to(source_dir)
-                        anime_folder = source_dir / relative.parts[0]
-                        anime_folders.add(anime_folder)
-                    except ValueError:
-                        continue
-
-                for anime_folder in anime_folders:
-                    all_videos = self._get_folder_videos(anime_folder)
-                    matched_paths = set(Path(k) for k in file_mappings.keys())
-                    unmatched_videos = [v for v in all_videos if v not in matched_paths]
-                    extras_files.extend(unmatched_videos)
+        # 2. auto_extras: 使用前端缓存找出未匹配视频
+        if auto_extras and folder_videos:
+            matched_paths = set(Path(k) for k in file_mappings.keys())
+            for videos in folder_videos.values():
+                all_videos = [Path(v) for v in videos]
+                unmatched_videos = [v for v in all_videos if v not in matched_paths]
+                extras_files.extend(unmatched_videos)
 
         # 3. 处理正片文件
         if content_type == "movie":

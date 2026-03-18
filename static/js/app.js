@@ -1696,8 +1696,55 @@ const app = createApp({
                 return;
             }
 
+            // 收集涉及的动漫文件夹的视频缓存（用于 auto_extras）
+            // 只收集有文件匹配的顶级文件夹，合并所有子文件夹的视频
+            const folderVideos = {};
+            const sourceDir = config.source_dir;
+
+            // 1. 先找出哪些顶级文件夹有文件被匹配
+            const matchedFolders = new Set();
+            for (const srcPath of Object.keys(fileMappings)) {
+                try {
+                    const relative = srcPath.replace(sourceDir + '\\', '').replace(sourceDir + '/', '');
+                    const parts = relative.split(/[\\/]/);
+                    if (parts.length > 0) {
+                        const animeFolder = sourceDir + '/' + parts[0];
+                        matchedFolders.add(animeFolder);
+                    }
+                } catch (e) {
+                    // 解析失败忽略
+                }
+            }
+
+            // 2. 只收集有匹配的顶级文件夹的视频缓存
+            for (const [cachePath, cacheData] of Object.entries(folderCache)) {
+                if (!cachePath.startsWith(sourceDir)) continue;
+                if (!cacheData || !cacheData.videos) continue;
+
+                const relative = cachePath.replace(sourceDir, '').replace(/^[\\/]/, '');
+                const parts = relative.split(/[\\/]/);
+                if (parts.length > 0) {
+                    const animeFolder = sourceDir + '/' + parts[0];
+                    
+                    // 只处理有匹配的顶级文件夹
+                    if (!matchedFolders.has(animeFolder)) continue;
+                    
+                    if (!folderVideos[animeFolder]) {
+                        folderVideos[animeFolder] = [];
+                    }
+                    // 添加该缓存的视频（去重）
+                    const videoPaths = cacheData.videos.map(v => v.path);
+                    videoPaths.forEach(p => {
+                        if (!folderVideos[animeFolder].includes(p)) {
+                            folderVideos[animeFolder].push(p);
+                        }
+                    });
+                }
+            }
+
             const data = {
                 file_mappings: fileMappings,
+                folder_videos: folderVideos,
                 content_type: searchType.value,
                 auto_extras: config.auto_extras,
                 scan_unorganized: config.scan_unorganized,

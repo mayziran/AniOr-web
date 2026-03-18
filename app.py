@@ -576,6 +576,7 @@ def organize():
     """执行整理"""
     data = request.json or {}
     file_mappings = data.get('file_mappings', {})
+    folder_videos = data.get('folder_videos', {})
     content_type = data.get('content_type', 'tv')
     tv_info = data.get('tv_info')
     movie_info = data.get('movie_info')
@@ -583,7 +584,7 @@ def organize():
     scan_unorganized = data.get('scan_unorganized', True)
 
     organizer = Organizer(config)
-    result = organizer.organize(file_mappings, content_type, tv_info, movie_info, auto_extras, scan_unorganized)
+    result = organizer.organize(file_mappings, content_type, tv_info, movie_info, auto_extras, scan_unorganized, folder_videos)
 
     return jsonify(result)
 
