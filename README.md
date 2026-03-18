@@ -69,6 +69,11 @@ docker-compose down
 
 > 修改 `/你的视频目录` 为实际路径
 
+## 界面预览
+
+![主界面](docs/screenshot_main_1.png)
+![主界面](docs/screenshot_main_2.png)
+
 ## 配置
 
 Web 界面 "设置" 中配置：
