@@ -246,23 +246,6 @@ class Organizer:
             'year': year
         }
 
-    def _get_folder_videos(self, folder: Path) -> List[Path]:
-        """获取文件夹中的视频文件（递归扫描子文件夹）"""
-        video_extensions = self.config.get_video_extensions()
-        videos = []
-        
-        # 群晖和系统文件夹排除列表
-        system_folders = ['@eaDir', '.@__thumb', '.AppleDouble']
-        
-        if folder.exists() and folder.is_dir():
-            for f in folder.rglob('*'):
-                if f.is_file() and f.suffix.lower() in video_extensions:
-                    # 排除系统文件夹中的视频（虽然系统文件夹中通常不会有视频）
-                    is_system_folder = any(sys_folder in str(f) for sys_folder in system_folders)
-                    if not is_system_folder:
-                        videos.append(f)
-        return videos
-
     def _get_folder_files(self, folder: Path) -> List[Path]:
         """获取文件夹中的所有文件（排除系统文件）"""
         # 群晖和系统文件排除列表

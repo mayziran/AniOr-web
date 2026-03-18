@@ -188,43 +188,6 @@ const app = createApp({
             return result;
         });
 
-        // 计算每个文件夹的已匹配文件数
-        const folderMatchCounts = computed(() => {
-            const counts = {};
-            const sourceDir = config.source_dir;
-            if (!sourceDir) return counts;
-
-            // 标准化源目录
-            const normalizedSourceDir = sourceDir.replace(/\\/g, '/').replace(/\/$/, '');
-
-            for (const filePath of matchedFiles.value) {
-                try {
-                    // 标准化文件路径
-                    const normalizedFilePath = filePath.replace(/\\/g, '/');
-
-                    // 获取文件所在文件夹路径
-                    const lastSlash = normalizedFilePath.lastIndexOf('/');
-                    if (lastSlash > 0) {
-                        const fileDir = normalizedFilePath.substring(0, lastSlash);
-
-                        // 检查是否在源目录的子文件夹中
-                        if (fileDir.startsWith(normalizedSourceDir)) {
-                            // 提取第一级子文件夹名称
-                            const relativePath = fileDir.substring(normalizedSourceDir.length);
-                            const firstFolder = relativePath.split('/').filter(p => p).shift();
-
-                            if (firstFolder) {
-                                // 使用文件夹名称作为key
-                                counts[firstFolder] = (counts[firstFolder] || 0) + 1;
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // 忽略错误
-                }
-            }
-            return counts;
-        });
 
         const moveModeName = computed(() => {
             const names = { link: '硬链接', cut: '剪切', copy: '复制' };
@@ -436,28 +399,6 @@ const app = createApp({
         const confirmDirSelection = () => {
             config[pendingDirField.value] = dirPickerPath.value;
             showDirPicker.value = false;
-        };
-
-        const onDirectorySelected = (event) => {
-            const files = event.target.files;
-            if (files && files.length > 0) {
-                // 获取选中的目录路径
-                const path = files[0].webkitRelativePath || files[0].name;
-                // 从file对象的path属性获取完整路径 (需要浏览器支持)
-                let dirPath = files[0].path || '';
-                if (!dirPath) {
-                    // 尝试从URL获取
-                    dirPath = window.URL.createObjectURL(files[0]);
-                }
-                // 对于webkitdirectory，需要获取文件夹的路径
-                const dirInput = document.getElementById('dirPicker');
-                if (dirInput.files[0]) {
-                    // 使用File API获取目录路径
-                    config[pendingDirField.value] = files[0].webkitRelativePath ?
-                        files[0].webkitRelativePath.split('/')[0] : '';
-                }
-            }
-            event.target.value = ''; // 重置以便再次选择同一目录
         };
 
         // ============ 文件夹 ============
@@ -1982,7 +1923,6 @@ const app = createApp({
             loginError,
 
             // 计算属性
-            folderMatchCounts,
             moveModeName,
             matchedCount,
             canOrganize,
@@ -2034,7 +1974,6 @@ const app = createApp({
             checkVolume,
             volumeWarning,
             selectDirectory,
-            onDirectorySelected,
             loadRootDirs,
             loadDirEntries,
             selectDirEntry,

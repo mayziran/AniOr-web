@@ -311,61 +311,6 @@ def scan_folder():
     })
 
 
-@app.route('/api/videos', methods=['GET'])
-@login_required
-def get_videos():
-    """加载视频列表"""
-    folder_path = request.args.get('path')
-    if not folder_path or not Path(folder_path).exists():
-        return jsonify({
-            'success': False,
-            'error': '无效的文件夹路径'
-        })
-
-    video_extensions = config.get_video_extensions()
-    videos = []
-    try:
-        folder = Path(folder_path)
-        for item in sorted(folder.iterdir(), key=lambda x: x.name.lower()):
-            if item.is_file() and item.suffix.lower() in video_extensions:
-                try:
-                    size_bytes = item.stat().st_size
-                    # 自动选择合适的单位
-                    if size_bytes >= 1024 * 1024 * 1024:
-                        size_str = f"{size_bytes / 1024 / 1024 / 1024:.2f} GB"
-                    elif size_bytes >= 1024 * 1024:
-                        size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
-                    elif size_bytes >= 1024:
-                        size_str = f"{size_bytes / 1024:.1f} KB"
-                    else:
-                        size_str = f"{size_bytes} B"
-                    mtime = item.stat().st_mtime
-                    file_date = time.strftime('%Y-%m-%d %H:%M', time.localtime(mtime))
-                    videos.append({
-                        'name': item.name,
-                        'path': str(item),
-                        'size': size_str,
-                        'date': file_date
-                    })
-                except:
-                    videos.append({
-                        'name': item.name,
-                        'path': str(item),
-                        'size': '未知',
-                        'date': ''
-                    })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-    return jsonify({
-        'success': True,
-        'videos': videos
-    })
-
-
 @app.route('/api/browse-dir', methods=['GET'])
 @login_required
 def browse_dir():
@@ -625,44 +570,6 @@ def organize_extras():
                         FileOperator.operate(sub_file, sub_dst, mode)
 
     return jsonify({'success': True, 'count': success_count})
-
-
-@app.route('/api/scan-unmatched', methods=['POST'])
-@login_required
-def scan_unmatched():
-    """扫描未匹配文件"""
-    data = request.json or {}
-    source_dir = data.get('source_dir', config.get('source_dir'))
-    matched_files = set(data.get('matched_files', []))
-
-    if not source_dir or not Path(source_dir).exists():
-        return jsonify({
-            'success': False,
-            'error': '源目录不存在'
-        })
-
-    video_extensions = config.get_video_extensions()
-    source_path = Path(source_dir)
-    unmatched = []
-
-    try:
-        for item in source_path.rglob('*'):
-            if item.is_file() and item.suffix.lower() in video_extensions:
-                if str(item) not in matched_files:
-                    unmatched.append({
-                        'name': item.name,
-                        'path': str(item)
-                    })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-    return jsonify({
-        'success': True,
-        'unmatched': unmatched
-    })
 
 
 @app.route('/api/check-volume', methods=['GET'])

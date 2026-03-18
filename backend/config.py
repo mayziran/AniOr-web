@@ -74,10 +74,6 @@ class Config:
         else:
             self.save()
 
-    def save_if_needed(self):
-        if self._pending:
-            self.save()
-
     def get_video_extensions(self) -> Set[str]:
         """获取视频格式集合（小写）"""
         exts = self.config.get('video_extensions', self.DEFAULT_VIDEO_EXTENSIONS)
@@ -90,26 +86,6 @@ class Config:
         if 'video_extensions' in result and isinstance(result['video_extensions'], list):
             result['video_extensions'] = ','.join(result['video_extensions'])
         return result
-
-    @classmethod
-    def check_duplicate_files(cls, paths: List[Path], matched_files: set) -> tuple:
-        """
-        检查文件是否已匹配（标绿）
-
-        Args:
-            paths: 要检查的文件路径列表
-            matched_files: 已匹配的文件集合
-
-        Returns:
-            (has_duplicates, error_message) 元组
-        """
-        duplicates = [p for p in paths if p in matched_files]
-        if duplicates:
-            dup_names = '\n'.join(p.name for p in duplicates[:5])
-            if len(duplicates) > 5:
-                dup_names += f'\n... 还有 {len(duplicates) - 5} 个文件'
-            return True, f"以下文件已经在其他位置匹配，不能重复添加：\n\n{dup_names}"
-        return False, ""
 
 
 # 全局配置实例
