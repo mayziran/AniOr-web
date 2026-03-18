@@ -586,6 +586,8 @@ const app = createApp({
                 if (result) {
                     originalFolder.video_count = result.video_count;
                     originalFolder.matched_count = result.matched_count;
+                    // 设置是否有子文件夹（用于显示展开箭头）
+                    originalFolder.has_subfolders = result.subfolders && result.subfolders.length > 0;
                     // 如果该文件夹有子文件夹，使用返回的subfolders
                     if (result.subfolders && result.subfolders.length > 0) {
                         originalFolder.children = result.subfolders.map(f => ({
@@ -727,6 +729,8 @@ const app = createApp({
                             matched_count: f.matched_count,
                             has_subfolders: f.has_subfolders
                         }));
+                        // 更新当前文件夹的 has_subfolders（用于显示展开按钮）
+                        targetFolder.has_subfolders = true;
                     }
 
                     const folderName = targetFolder.name || targetFolder.path.split(/[/\\]/).pop();
@@ -1255,47 +1259,68 @@ const app = createApp({
             refreshVideoHighlight();
         };
 
-        // 扫描包含已匹配文件的文件夹
+        // 刷新文件夹统计信息（包括子文件夹）
         const scanFoldersWithMatchedFiles = async (matchedSet) => {
             if (matchedSet.size === 0) return;
 
             // 收集所有匹配文件的目录路径
             const matchedDirs = new Set();
             matchedSet.forEach(path => {
-                // 获取文件的直接父目录
                 const dir = path.substring(0, path.lastIndexOf('/'));
                 if (dir) matchedDirs.add(dir);
             });
 
-            // 找出需要刷新的文件夹（所有匹配的文件夹，不管是否缓存）
-            const foldersToRefresh = new Map(); // path -> folderObj
+            // 递归刷新文件夹（同时更新 folders.value 和 folderCache）
+            const refreshFolder = (folderPath, cachedData = null, parentCached = null) => {
+                // 如果没有传入缓存数据，尝试从 folderCache 获取
+                const cached = cachedData || folderCache[folderPath];
+                if (!cached || !cached.videos) return;
 
-            const checkFolder = (folder) => {
-                matchedDirs.forEach(dir => {
-                    // 如果匹配文件的父目录是这个文件夹的子目录，则需要刷新这个文件夹
-                    if (dir.startsWith(folder.path + '/') || dir === folder.path) {
-                        foldersToRefresh.set(folder.path, folder);
+                // 检查是否需要刷新
+                let needsRefresh = false;
+                for (const dir of matchedDirs) {
+                    if (dir.startsWith(folderPath + '/') || dir === folderPath) {
+                        needsRefresh = true;
+                        break;
                     }
-                });
-                // 递归检查子文件夹（如果存在）
-                if (folder.children && folder.children.length > 0) {
-                    folder.children.forEach(checkFolder);
+                }
+
+                if (needsRefresh) {
+                    const folder = findFolderByPath(folders.value, folderPath);
+                    if (folder) {
+                        const allVideos = cached.videos;
+                        const matched = allVideos.filter(v => matchedSet.has(v.path)).length;
+                        folder.video_count = allVideos.length;
+                        folder.matched_count = matched;
+                    }
+
+                    // 同时更新 folderCache 中的 subfolders
+                    if (parentCached && parentCached.subfolders) {
+                        const childInSubfolders = parentCached.subfolders.find(c => c.path === folderPath);
+                        if (childInSubfolders) {
+                            const allVideos = cached.videos;
+                            const matched = allVideos.filter(v => matchedSet.has(v.path)).length;
+                            childInSubfolders.video_count = allVideos.length;
+                            childInSubfolders.matched_count = matched;
+                        }
+                    }
+                }
+
+                // 递归刷新子文件夹（从 cached.subfolders 获取数据）
+                if (cached.subfolders && cached.subfolders.length > 0) {
+                    cached.subfolders.forEach(child => {
+                        refreshFolder(child.path, child, cached);
+                    });
                 }
             };
 
-            folders.value.forEach(checkFolder);
+            // 从一级文件夹开始刷新
+            folders.value.forEach(folder => {
+                refreshFolder(folder.path);
+            });
 
-            // 刷新需要更新的文件夹统计信息
-            for (const [folderPath, folder] of foldersToRefresh.entries()) {
-                const cached = folderCache[folderPath];
-                if (cached && cached.videos) {
-                    // 从缓存中计算统计信息
-                    const allVideos = cached.videos;
-                    const matched = allVideos.filter(v => matchedSet.has(v.path)).length;
-                    folder.video_count = allVideos.length;
-                    folder.matched_count = matched;
-                }
-            }
+            // 强制触发响应式更新
+            folders.value = [...folders.value];
         };
 
         // 刷新视频列表标绿
@@ -1331,6 +1356,9 @@ const app = createApp({
 
             // 更新所有一级文件夹及其子文件夹
             folders.value.forEach(updateFolderCounts);
+
+            // 强制触发响应式更新
+            folders.value = [...folders.value];
         };
 
         const hasMatches = computed(() => {
@@ -1563,35 +1591,26 @@ const app = createApp({
         };
 
         const switchToSingleMode = () => {
-            // 保存当前季度的 file_mappings（防止被覆盖为空）
-            const sn = currentSeason.value;
-            const savedMapping = (typeof sn === 'number' && seasonFileMappings[sn]) ? {...seasonFileMappings[sn]} : {};
-
-            // 切换到单集模式：直接清空批量数据（与原版一致，不保存）
+            // 切换到单集模式：清空批量数据（与原版一致）
             batchFiles.value = [];
             matchMode.value = 'single';
             if (typeof currentSeason.value === 'number') {
                 seasonMatchModes[currentSeason.value] = 'single';
             }
+
+            // 重新生成当前季度的 file_mappings（只包含单集匹配数据）
             updateCurrentSeasonFileMapping();
 
-            // 恢复保存的映射（防止高亮消失）
-            if (Object.keys(seasonFileMappings[sn] || {}).length === 0 && Object.keys(savedMapping).length > 0) {
-                seasonFileMappings[sn] = savedMapping;
-            }
-
+            // 刷新高亮和统计
             updateMatchedFiles();
+
             if (episodes.value.length === 0 && currentSeason.value !== 'extras') {
                 selectSeason(currentSeason.value);
             }
         };
 
         const switchToBatchMode = () => {
-            // 保存当前季度的 file_mappings（防止被覆盖为空）
-            const sn = currentSeason.value;
-            const savedMapping = (typeof sn === 'number' && seasonFileMappings[sn]) ? {...seasonFileMappings[sn]} : {};
-
-            // 切换到批量模式：直接清空单集数据（与原版一致，不保存）
+            // 切换到批量模式：清空单集数据（与原版一致）
             // 只清空当前季度的单集匹配
             const seasonPrefix = 'S' + String(currentSeason.value).padStart(2, '0') + 'E';
             Object.keys(matchedEpisodes).forEach(key => {
@@ -1603,13 +1622,11 @@ const app = createApp({
             if (typeof currentSeason.value === 'number') {
                 seasonMatchModes[currentSeason.value] = 'batch';
             }
+
+            // 重新生成当前季度的 file_mappings（只包含批量匹配数据）
             updateCurrentSeasonFileMapping();
 
-            // 恢复保存的映射（防止高亮消失）
-            if (Object.keys(seasonFileMappings[sn] || {}).length === 0 && Object.keys(savedMapping).length > 0) {
-                seasonFileMappings[sn] = savedMapping;
-            }
-
+            // 刷新高亮和统计
             updateMatchedFiles();
         };
 

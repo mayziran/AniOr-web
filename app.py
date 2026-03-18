@@ -177,12 +177,11 @@ def _add_video(item, matched_files, videos):
 
 
 def _scan_immediate_folders(folder_path):
-    """扫描immediate文件夹（不递归）"""
+    """扫描一级文件夹（只获取名称，不检查子文件夹，与原版一致）"""
     folders = []
     try:
         for item in sorted(folder_path.iterdir(), key=lambda x: x.name.lower()):
             if item.is_dir():
-                has_subfolders = any(sub.is_dir() for sub in item.iterdir())
                 try:
                     mtime = item.stat().st_mtime
                     folder_date = time.strftime('%Y-%m-%d %H:%M', time.localtime(mtime))
@@ -191,7 +190,7 @@ def _scan_immediate_folders(folder_path):
                 folders.append({
                     'name': item.name,
                     'path': str(item),
-                    'has_subfolders': has_subfolders,
+                    'has_subfolders': False,  # 初始为 False，展开时按需加载
                     'date': folder_date,
                     'video_count': None,
                     'matched_count': None
@@ -740,7 +739,7 @@ def _startup_scan():
                 logging.info(f'[启动扫描] 源目录未配置或不存在：{source_dir}')
                 return
 
-            # 扫描一级文件夹
+            # 扫描一级文件夹（只获取名称，不检查子文件夹，与原版一致）
             folder_path = Path(source_dir)
             folders = []
 
@@ -751,7 +750,6 @@ def _startup_scan():
                     if item.name in system_folders:
                         continue
 
-                    has_subfolders = any(sub.is_dir() for sub in item.iterdir())
                     try:
                         mtime = item.stat().st_mtime
                         folder_date = time.strftime('%Y-%m-%d %H:%M', time.localtime(mtime))
@@ -761,7 +759,7 @@ def _startup_scan():
                     folders.append({
                         'name': item.name,
                         'path': str(item),
-                        'has_subfolders': has_subfolders,
+                        'has_subfolders': False,  # 初始为 False，展开时按需加载
                         'date': folder_date,
                         'video_count': None,
                         'matched_count': None
