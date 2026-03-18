@@ -40,3 +40,6 @@ config
 # Docker
 .docker
 docker-compose.override.yml
+
+# Documentation
+docs/
