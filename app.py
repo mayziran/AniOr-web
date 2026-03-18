@@ -390,8 +390,8 @@ def browse_dir():
             # Linux/Mac: 返回根目录或用户目录
             home = str(Path.home())
             return jsonify({'success': True, 'entries': [
-                {'name': '/', 'path': '/'},
-                {'name': 'Home', 'path': home}
+                {'name': '/', 'path': '/', 'is_dir': True},
+                {'name': 'Home', 'path': home, 'is_dir': True}
             ]})
 
     folder_path = Path(path)
