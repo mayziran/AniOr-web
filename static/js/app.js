@@ -1271,7 +1271,7 @@ const app = createApp({
             });
 
             // 递归刷新文件夹（同时更新 folders.value 和 folderCache）
-            const refreshFolder = (folderPath, cachedData = null, parentCached = null) => {
+            const refreshFolder = (folderPath, cachedData = null, folderInTree = null) => {
                 // 如果没有传入缓存数据，尝试从 folderCache 获取
                 const cached = cachedData || folderCache[folderPath];
                 if (!cached || !cached.videos) return;
@@ -1286,37 +1286,36 @@ const app = createApp({
                 }
 
                 if (needsRefresh) {
+                    const allVideos = cached.videos;
+                    const matched = allVideos.filter(v => matchedSet.has(v.path)).length;
+
+                    // 1. 如果传入了 folderInTree，直接更新它
+                    if (folderInTree) {
+                        folderInTree.video_count = allVideos.length;
+                        folderInTree.matched_count = matched;
+                    }
+
+                    // 2. 同时从 folders.value 查找并更新
                     const folder = findFolderByPath(folders.value, folderPath);
-                    if (folder) {
-                        const allVideos = cached.videos;
-                        const matched = allVideos.filter(v => matchedSet.has(v.path)).length;
+                    if (folder && folder !== folderInTree) {
                         folder.video_count = allVideos.length;
                         folder.matched_count = matched;
                     }
-
-                    // 同时更新 folderCache 中的 subfolders
-                    if (parentCached && parentCached.subfolders) {
-                        const childInSubfolders = parentCached.subfolders.find(c => c.path === folderPath);
-                        if (childInSubfolders) {
-                            const allVideos = cached.videos;
-                            const matched = allVideos.filter(v => matchedSet.has(v.path)).length;
-                            childInSubfolders.video_count = allVideos.length;
-                            childInSubfolders.matched_count = matched;
-                        }
-                    }
                 }
 
-                // 递归刷新子文件夹（从 cached.subfolders 获取数据）
+                // 递归子文件夹
                 if (cached.subfolders && cached.subfolders.length > 0) {
-                    cached.subfolders.forEach(child => {
-                        refreshFolder(child.path, child, cached);
+                    const childrenArray = folderInTree && folderInTree.children ? folderInTree.children : null;
+                    cached.subfolders.forEach((child, index) => {
+                        const childInTree = childrenArray ? childrenArray[index] : null;
+                        refreshFolder(child.path, child, childInTree);
                     });
                 }
             };
 
             // 从一级文件夹开始刷新
             folders.value.forEach(folder => {
-                refreshFolder(folder.path);
+                refreshFolder(folder.path, null, folder);
             });
 
             // 强制触发响应式更新
@@ -1334,18 +1333,34 @@ const app = createApp({
 
         const updateMatchedHighlight = () => {
             // 从缓存的文件夹数据更新 matched_count
-            // 原版逻辑：matched_count 统计该文件夹下所有视频（含子文件夹）中已匹配的数量
             const updateFolderCounts = (folderItem) => {
                 if (!folderItem || !folderItem.path) return;
 
-                // 从缓存获取该文件夹的所有视频（已包含子文件夹的所有视频）
+                // 从缓存获取该文件夹的所有视频
                 const cached = folderCache[folderItem.path];
                 if (cached && cached.videos) {
-                    // 使用所有视频（不按深度过滤），这与原版一致
                     const allVideos = cached.videos;
                     const matched = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
                     folderItem.video_count = allVideos.length;
                     folderItem.matched_count = matched;
+                } else {
+                    // 如果没有缓存（子文件夹没有独立 key），从父缓存中查找
+                    const folderPathNormalized = folderItem.path.replace(/\\/g, '/');
+                    for (const [cacheKey, cacheValue] of Object.entries(folderCache)) {
+                        if (cacheKey.endsWith('_root')) continue;
+                        if (cacheValue.subfolders) {
+                            const childInCache = findSubfolder(cacheValue.subfolders, folderItem.path);
+                            if (childInCache) {
+                                const allVideos = (cacheValue.videos || []).filter(v => {
+                                    const videoPath = v.path.replace(/\\/g, '/');
+                                    return videoPath.startsWith(folderPathNormalized + '/');
+                                });
+                                folderItem.video_count = allVideos.length;
+                                folderItem.matched_count = allVideos.filter(v => matchedFiles.value.has(v.path)).length;
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 // 递归更新子文件夹
